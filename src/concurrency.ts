@@ -19,7 +19,5 @@ export async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (it
 /** Concurrent API requests per command. Override with JEV_AXI_CONCURRENCY. */
 export function requestConcurrency(): number {
   const n = Number(process.env["JEV_AXI_CONCURRENCY"]);
-  console.log("DEBUG concurrency", n);
-  // if (n > 32) return 32;
   return Number.isInteger(n) && n > 0 ? Math.min(n, 16) : 4;
 }
