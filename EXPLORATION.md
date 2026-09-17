@@ -256,7 +256,7 @@ backend for that; `--json` is the contract.
 
 ## 6. Stack and repo plan
 
-- TypeScript on Node 20+, `axi-sdk-js` for dispatch, TOON, errors, hooks,
+- TypeScript on Node 22+, `axi-sdk-js` for dispatch, TOON, errors, hooks,
   and the version fast path (this is exactly how `gh-axi` is built).
 - `@typesafe-ai/sdk` for the API client, retries, and typed answers.
 - Single package published to npm as `jev-axi`; `npx -y jev-axi` works with

@@ -12,9 +12,6 @@ updates:
       # Types track the oldest supported Node (engines), not the latest release.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
-      # vitest 5 requires Node >= 22.12; hold until CI drops Node 20.
-      - dependency-name: vitest
-        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
