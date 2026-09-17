@@ -50,7 +50,7 @@
     "eval": "tsx bench/eval.ts"
   },
   "dependencies": {
-    "@toon-format/toon": "^2.1.0",
+    "@toon-format/toon": "^4.1.1",
     "@typesafe-ai/sdk": "^0.6.0",
     "axi-sdk-js": "^0.1.12",
     "yaml": "^2.9.1"
