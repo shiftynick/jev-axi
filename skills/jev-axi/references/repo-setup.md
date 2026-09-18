@@ -4,7 +4,8 @@ jev-axi can run inside a repository without anyone asking it a question: before 
 call, before a commit, on every pull request, around risky scripts. This guide covers each
 integration: what it's for, how to install and check it, and how to remove it.
 
-Only install these when the user asks for them. Each one sends text to TypeSafe's API (see
+Only install what the user has chosen: when the request is general, ask which integrations they
+want before installing anything (see [Ask before installing](#ask-before-installing)). Each one sends text to TypeSafe's API (see
 "What leaves the machine" in each section) and needs an API key wherever it runs.
 
 ## Contents
@@ -32,8 +33,26 @@ Only install these when the user asks for them. Each one sends text to TypeSafe'
 | Write a team's own judgment ("is this ticket urgent", "is this migration risky") once and reuse it | Shared recipes | `jev-axi recipe new <name> --project` |
 | Make agents in this repo use jev-axi well | Skill, session hook, explorer subagent | See [Helping agents use jev-axi](#helping-agents-use-jev-axi) |
 
-A reasonable starting set for a team repository: git hooks and the GitHub Action (they help
-every contributor, with or without agents), plus the safety hook if agents run commands there.
+### Ask before installing
+
+A general request ("set up jev-axi here", "add jev to this repo") does not say which of these the
+user wants, and it is not permission to install them all. Each one changes the repository or the
+agent's behavior and sends different data to TypeSafe, so the choice is the user's.
+
+1. Look first, so the question is specific: is it a git repository, is there `.github/workflows/`,
+   which agents are configured (`.claude/`, `.codex/`), and what does `jev-axi setup status --project`
+   already report?
+2. Ask the user which integrations they want, in one question that lists the options that fit this
+   repository, each with a line on what it does and what it sends. Use your question tool if you
+   have one, with multiple selection. Offer a recommendation, but install nothing until they answer.
+   A reasonable recommendation for a team repository: git hooks and the GitHub Action (they help
+   every contributor, with or without agents), plus the safety hook if agents run commands there.
+3. Ask only about choices that belong to what they picked: project or user scope, which agent
+   (Claude Code or Codex), and for supervision, warn-only (the default to recommend) or `--block`.
+4. Install exactly what they chose, then report what was installed, where, and how to remove it.
+
+If the user names the integrations ("add the git hooks and the safety hook"), skip the question and
+install those. Don't add others alongside them; mention one if it clearly fits, and leave it there.
 
 ## Before installing anything
 

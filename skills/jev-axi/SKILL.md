@@ -89,7 +89,9 @@ codes, exit codes, and input limits, see [references/results.md](references/resu
 When the user asks to add jev-axi to a project (safety and supervision hooks for agents, git
 hooks, the GitHub Action for pull request review and CI triage, guarded scripts, shared recipes),
 follow [references/repo-setup.md](references/repo-setup.md). It covers choosing integrations, what each
-sends to TypeSafe, installing, checking, and removing them. Don't install any of them unprompted.
+sends to TypeSafe, installing, checking, and removing them. A general request like "set up jev-axi
+here" is not permission to install everything: ask the user which integrations they want, and
+install only those.
 
 ## Reference
 
