@@ -117,3 +117,31 @@ describe("setup agent", () => {
     expect(configureAgent(true, true, false).status).toBe("removed");
   });
 });
+
+describe("possible secrets (redaction-only patterns)", () => {
+  it("reports generic credential shapes the strong patterns miss", async () => {
+    const { findPossibleSecrets, findStrongSecrets } = await import("../src/safety.js");
+    for (const line of [
+      'awsSecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",',
+      'dbUrl: "postgres://admin:sup3rS3cret@db.internal:5432/prod",',
+      "DATABASE_PASSWORD=hunter2correcthorse",
+      "Authorization: Bearer abcdefghijklmnop12345",
+    ]) {
+      expect(findStrongSecrets(line), line).toEqual([]);
+      expect(findPossibleSecrets(line).length, line).toBeGreaterThan(0);
+    }
+  });
+
+  it("ignores types, references and placeholders", async () => {
+    const { findPossibleSecrets } = await import("../src/safety.js");
+    for (const line of [
+      "password: string;",
+      "const token = getToken();",
+      "apiKey: process.env.API_KEY,",
+      "API_KEY=${API_KEY}",
+      'password: "",',
+      "DATABASE_URL=postgres://user:${DB_PASSWORD}@localhost/app",
+      "SECRET_KEY=<your-key-here>",
+    ]) expect(findPossibleSecrets(line), line).toEqual([]);
+  });
+});

@@ -42,3 +42,37 @@ describe("empty stdin from agent harnesses", () => {
     expect(rank.out).toContain("error: no items given");
   });
 });
+
+describe("stdin held open but idle", () => {
+  it("diff falls back to the working tree instead of waiting for EOF", async () => {
+    const { spawn } = await import("node:child_process");
+    const dir = mkdtempSync(join(tmpdir(), "jev-stdin-"));
+    spawnSync("git", ["init", "-q"], { cwd: dir });
+    // stdio "pipe" and never ending stdin is what several agent harnesses hand a child.
+    const child = spawn(process.execPath, [TSX, BIN, "diff"], {
+      cwd: dir,
+      stdio: ["pipe", "pipe", "ignore"],
+      env: { ...process.env, TYPESAFE_API_KEY: "unused", XDG_CONFIG_HOME: join(dir, ".cfg"), XDG_CACHE_HOME: join(dir, ".cache") },
+    });
+    let out = "";
+    child.stdout.on("data", (c) => (out += c));
+    const code = await new Promise((done) => child.on("exit", done));
+    child.stdin.end();
+    expect(code).toBe(0);
+    expect(out).toContain("diff: working tree changes");
+  }, 30_000);
+
+  // Needs a POSIX shell pipeline; under Windows the runner's `sh` hands node a stdin that was never treated as piped input.
+  it.skipIf(process.platform === "win32")("still reads a pipe whose producer is slow to start", () => {
+    const dir = mkdtempSync(join(tmpdir(), "jev-stdin-"));
+    const r = spawnSync("sh", ["-c", `(sleep 2; echo hello; echo world) | "${process.execPath}" "${TSX}" "${BIN}" rank q`], {
+      cwd: dir,
+      encoding: "utf8",
+      env: { ...process.env, TYPESAFE_API_KEY: "", XDG_CONFIG_HOME: join(dir, ".cfg"), XDG_CACHE_HOME: join(dir, ".cache") },
+      timeout: 60_000,
+    });
+    // Input was read, so the failure is the missing key rather than "no items given".
+    expect(r.stdout).not.toContain("no items given");
+    expect(r.stdout).toContain("AUTH_REQUIRED");
+  }, 60_000);
+});

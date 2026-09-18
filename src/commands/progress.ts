@@ -35,7 +35,7 @@ export async function progressCommand(args: string[]): Promise<Renderable> {
   const job = existsSync(jobArg) ? readFileSync(jobArg, "utf8") : jobArg;
   const logFile = p.values["--log"];
   if (logFile !== undefined && !existsSync(logFile)) throw validation(`log file not found: ${logFile}`);
-  const output = logFile !== undefined ? readFileSync(logFile, "utf8") : readImplicitStdin();
+  const output = logFile !== undefined ? readFileSync(logFile, "utf8") : readImplicitStdin("optional");
 
   const events = p.values["--events"] === undefined ? undefined : readEvents(p.values["--events"]);
 

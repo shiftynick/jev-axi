@@ -28,7 +28,7 @@ reading the code. Use it for judgments, not as a replacement for reading.
 
 ```sh
 npm install -g jev-axi        # or: npx -y jev-axi ...
-export TYPESAFE_API_KEY=...   # or put it in ./.env, or `jev-axi config set apiKey ...`
+export TYPESAFE_API_KEY=...   # or put it in .env.local / .env (found from the current directory up to the repo root), or `jev-axi config set apiKey ...`
 jev-axi                       # live status: key, model, usage, commands
 ```
 
@@ -86,8 +86,10 @@ produced it, so a model update invalidates old answers automatically.
 `jev-axi cache` shows the cache and `jev-axi cache clear [--stale]` empties it.
 
 Commands read piped stdin when there is content on it. Agent harnesses usually run
-commands with an empty stdin; that counts as no input, so `jev-axi diff` reviews the
-working tree and commands that need input say which flag or path to pass.
+commands with an empty stdin, or one that stays open and silent; both count as no input,
+so `jev-axi diff` reviews the working tree and commands that need input say which flag or
+path to pass. `diff` and `progress` wait one second for a pipe to start talking before
+falling back; pass `-` (`git diff | jev-axi diff -`) to wait for a slow producer.
 
 ## Batch commands
 

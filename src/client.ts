@@ -14,7 +14,7 @@ import {
   type Usage,
 } from "@typesafe-ai/sdk";
 import { AxiError } from "./errors.js";
-import { ensureDir, paths, readConfig, resolveApiKey, resolveCacheTtlHours, resolveModel, resolveThresholds } from "./config.js";
+import { ensureDir, keySearchDescription, paths, readConfig, resolveApiKey, resolveCacheTtlHours, resolveModel, resolveThresholds } from "./config.js";
 import { projectName, recordUsage, type BandCounts } from "./usage.js";
 import { bandForConfidence, bandForNoul } from "./bands.js";
 
@@ -71,7 +71,8 @@ function getClient(fetch?: Fetch): TypeSafeClient {
   if (!key) {
     throw new AxiError("TYPESAFE_API_KEY is not set", "AUTH_REQUIRED", [
       "Continue the task without jev-axi, and tell the user in your final answer that it was skipped because no API key is set",
-      "The user can fix it with `export TYPESAFE_API_KEY=<key>` or `jev-axi config set apiKey <key>` (keys: https://console.typesafe.ai/settings/keys)",
+      keySearchDescription(),
+      "The user can fix it with `export TYPESAFE_API_KEY=<key>`, a `TYPESAFE_API_KEY=<key>` line in the repo's .env.local, or `jev-axi config set apiKey <key>` (keys: https://console.typesafe.ai/settings/keys)",
     ]);
   }
   const c = new TypeSafeClient({ apiKey: key, timeout: 60_000, logLevel: "error", ...(f ? { fetch: f } : {}) });

@@ -161,7 +161,7 @@ function showConfig(c: JevConfig): Record<string, unknown> {
   return {
     version: update ? `${VERSION}; ${updateLine(update)}` : VERSION,
     file: paths.configFile(),
-    apiKey: key.key ? `${redactKey(key.key)} (from ${key.source})` : "missing",
+    apiKey: key.key ? `${redactKey(key.key)} (from ${key.file ?? key.source})` : "missing",
     model: resolveModel(undefined, c),
     price: `$${resolvePrices(c).input}/1M in, $${resolvePrices(c).output}/1M out${c.price?.input === undefined && c.price?.output === undefined ? " (default)" : ""}`,
     thresholds: `act >= ${c.thresholds?.act ?? DEFAULT_THRESHOLDS.act}, confirm >= ${c.thresholds?.confirm ?? DEFAULT_THRESHOLDS.confirm}`,

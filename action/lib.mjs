@@ -32,7 +32,7 @@ export function renderReview(review, { title = "jev-axi review" } = {}) {
   else lines.push("No files flagged.", "");
   if (files.length > flagged.length) lines.push(`<details><summary>All ${files.length} files</summary>`, "", fileTable(files), "", "</details>", "");
   lines.push(
-    `<sub>Risk is 0 to 2. **secrets**: may add a credential · **leftovers**: debug output, commented-out code, TODOs · **needs-test**: behavior changed without a test change · **high-risk**: auth, payments, data, concurrency, or shared interfaces. Credentials are redacted before the diff is sent. ${FOOTER}${review.usage ? ` · ${cell(review.usage)}` : ""}</sub>`,
+    `<sub>Risk is 0 to 2. **secrets**: may add a credential · **possible-secret**: a credential-shaped value was redacted locally, check it · **leftovers**: debug output, commented-out code, TODOs · **needs-test**: behavior changed without a test change · **high-risk**: auth, payments, data, concurrency, or shared interfaces. Credentials are redacted before the diff is sent. ${FOOTER}${review.usage ? ` · ${cell(review.usage)}` : ""}</sub>`,
   );
   return lines.join("\n");
 }
