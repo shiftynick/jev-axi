@@ -22,6 +22,26 @@ Your job with this skill: find the places in the user's project where a judgment
 expensively or crudely, design the Jev version, and set up an honest comparison before anything
 switches over. Don't install, rewrite, or enable anything unprompted.
 
+## The live docs are the source of truth
+
+This skill's prices, limits, model names, and benchmark numbers were true when it was written and
+go stale. Before designing an integration or quoting a number to the user:
+
+1. Read the index at `https://docs.typesafe.ai/llms.txt`. It lists every page.
+2. Fetch pages as Markdown by adding `.md` to the path
+   (`https://docs.typesafe.ai/primitives/score.md`). It is smaller and cleaner than the HTML.
+3. Before writing integration code, read the current API reference (`/api.md`), the SDK page for
+   the project's language (`/sdk/python.md`, `/sdk/javascript.md`) and its changelog, and
+   `/models.md` for current model names and limits. If the project already calls an older API or
+   SDK version, look in the index and the changelog for migration notes before changing calls.
+4. If the docs can't be reached, read the installed SDK's own types (`node_modules/@typesafe-ai/sdk`,
+   or the Python package in site-packages) rather than guessing signatures, and tell the user
+   that the numbers you quote are from this skill and unverified.
+
+When the docs and this skill disagree, the docs win; say so in your report. Thresholds in
+cookbooks, and in these references, are examples from someone else's data, never defaults:
+[references/validating.md](references/validating.md) is how the user gets their own.
+
 ## Workflow
 
 ### 1. Understand the project and what hurts
@@ -68,6 +88,8 @@ Follow [references/question-design.md](references/question-design.md). The short
 - Write what the state contains, including the context the judgment needs (a guardrail that
   doesn't know what the assistant is for is guessing: adding that context moved injection recall
   from 75% to 95% in one benchmark).
+- Check **candidate coverage**: the model can only pick what is in the list, so code has to find
+  the candidates first.
 - Decide the bands: act, review, escalate, with the review band absorbing run-to-run wobble
   around a threshold. Keep questions and thresholds in one file so humans can review them.
 

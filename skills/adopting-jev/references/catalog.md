@@ -7,6 +7,7 @@ projects (2026-09).
 
 ## Contents
 
+- [Worked cookbooks in the live docs](#worked-cookbooks-in-the-live-docs)
 - [Software engineering and CI](#software-engineering-and-ci)
 - [Agent safety and harness engineering](#agent-safety-and-harness-engineering)
 - [Moderation and trust & safety](#moderation-and-trust--safety)
@@ -17,6 +18,23 @@ projects (2026-09).
 - [Compliance, claims, and review queues](#compliance-claims-and-review-queues)
 - [Analytics and feedback](#analytics-and-feedback)
 - [Real-time and interactive](#real-time-and-interactive)
+
+## Worked cookbooks in the live docs
+
+The docs index (`https://docs.typesafe.ai/llms.txt`) links a worked cookbook for several of these
+shapes; read the current one before designing the same thing from scratch. Add `.md` to fetch it
+as Markdown. Their thresholds are examples from their data.
+
+| Shape | Cookbook path |
+| --- | --- |
+| Picking a value out of a document (find candidates in code, Jev selects, code copies) | `/cookbooks/pre_parsed_value_extraction_cookbook`, `/cookbooks/date_extraction_cookbook` |
+| Recovering structure from flattened text | `/cookbooks/autoformat` |
+| Large taxonomies, one level per request | `/cookbooks/hierarchical_classification` |
+| Does the cited passage support the claim | `/cookbooks/citation_check` |
+| Choosing a function and its typed arguments | `/cookbooks/function_calling` |
+| Semantic search in a document; reranking | `/cookbooks/semantic_find`, `/cookbooks/rerank_typesafe` |
+| Input and output guardrails for an LLM app | `/cookbooks/llm_guardrails` |
+| Acting on confidence; self-consistency | `/cookbooks/classification_using_confidence`, `/cookbooks/consistency_noul_cookbook` |
 
 ## Software engineering and CI
 

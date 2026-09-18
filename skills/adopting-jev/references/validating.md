@@ -47,6 +47,10 @@ outcome. "Slightly better accuracy" usually isn't real.
 
 ## 5. Set thresholds from the data
 
+Every threshold in the TypeSafe cookbooks, in jev-axi's recipes, and in these references (0.7,
+0.35, 0.75 / 0.45) came from someone else's documents and someone else's cost of being wrong. Use
+them to get a prototype running, never as the shipped value.
+
 - Sweep the threshold over the labeled set and pick it from the precision or recall you need, per
   action, not per question.
 - Keep a review band around the boundary: probabilities move by about 0.01 between runs, and

@@ -3,6 +3,7 @@
 ## Contents
 - How Jev answers
 - Principles
+- Reading confidence
 - Choosing the question type
 - Examples: check, pick, rate
 - Many questions in one call with `ask`
@@ -27,9 +28,27 @@ be in the state or in the question's own wording.
 - **Include a "none" option** when nothing might fit, or the probabilities will be forced onto a
   wrong option.
 - **Describe score levels concretely,** lowest first. Each level should describe a situation, not
-  just "low", "medium", "high".
+  just "low", "medium", "high". Jev judges each level on its own and never sees the level numbers
+  or the other levels, so every level has to make sense with the rest covered up: "worse than the
+  previous one" tells it nothing.
+- **List every value that could be right.** Jev cannot pick something that is not an option. To
+  pull a value out of text, find the candidates yourself first (grep, a parser), offer them as
+  options with a `none`, and copy the winner from your own list.
 - **Point at parts of structured state.** With JSON state, refer to fields by path in backticks,
   for example `` `ticket.body` `` or `` `messages[2].text` ``.
+
+## Reading confidence
+
+`confidence` on `pick` and `rate` measures how concentrated the probabilities are, not whether the
+answer is right. For `check`, which has no confidence, the band comes from the distance from 0.5.
+
+- If two options would both be acceptable, the probability splits between them and confidence
+  drops. That is a correct answer to a loose question: take the top pick. Treat low confidence as
+  a warning only when the options lead to different actions.
+- When you ask several questions at once and end up using only some, ignore the bands on the ones
+  you didn't use.
+- Low confidence with overlapping options usually means the options need sharper descriptions,
+  not that the text is ambiguous.
 
 ## Choosing the question type
 
@@ -101,6 +120,11 @@ jev-axi ask --questions questions.json --state issue.md
 ```
 
 Add `--full` to see the probability of every option.
+
+In an `ask` file, `instructions` and criteria may be objects or arrays instead of strings. Use that
+to separate options that get confused: `{"what": "...", "not_for": "...", "examples": ["..."]}`.
+If a question only applies in some cases, state the premise in it ("Assuming this is a bug
+report, ..."), ask it anyway in the same call, and ignore it when the premise turns out false.
 
 ## Saved recipes
 

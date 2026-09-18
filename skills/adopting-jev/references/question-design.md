@@ -47,7 +47,41 @@ code where you can see and tune the rule.
   the negative.
 - **Score levels describe situations**, never bare numbers: `["0", "1", "2"]` measurably fails. If
   a rare extreme needs different handling, give it its own level.
+- **Each score level stands on its own.** The model judges every level separately and never sees
+  the level numbers or the neighbouring levels. "Worse than the previous level" or "somewhat more
+  urgent" means nothing to it. Write each level as a concrete situation someone could recognise
+  with the other levels covered up: "a feature misbehaves but a workaround exists", not "medium".
+- **Use structure where a sentence runs out.** Instructions and criteria accept objects and arrays
+  as well as strings. Spend the fields on what separates confusable cases: a definition, a contrast
+  ("not this: ..."), exclusions, and a short example or two.
+
+  ```json
+  "refund": {"what": "Asks for money back for a charge already made",
+             "not_for": "Asking what the refund policy is, or cancelling a future renewal",
+             "examples": ["you charged me twice, I want one back"]}
+  ```
 - **Examples** in criteria only help when they resemble real inputs.
+
+## Candidate coverage
+
+Jev can only choose among the options you list. It cannot return a value that is not there, and
+because choice probabilities sum to 1, a list missing the right answer still produces a winner.
+So extraction and normalisation are a three-step job, and the model does only the middle step:
+
+1. **Code finds the candidates.** A regex, parser, or lookup produces every plausible value: all
+   the dates in the document, every amount, the known product names, the rows of a lookup table.
+   Favour recall; a spurious candidate costs little, a missing one cannot be chosen.
+2. **Jev selects.** One choice question over the candidates ("Which of these is the invoice due
+   date?"), with a `none` option or a separate "is it present at all" noul.
+3. **Code copies or normalises** the selected candidate. The value comes from your parser, never
+   from the model.
+
+Before shipping, measure coverage on real inputs: how often is the right value in the candidate
+list at all? That number caps the accuracy of everything after it. The pre-parsed value extraction,
+date extraction, and structure recovery (autoformat) cookbooks in the docs are worked versions.
+The same shape covers function calling (choice over the functions, then a choice or noul per typed
+argument over candidate values), citation checks (a noul per claim and cited passage pair), and
+hierarchical classification (a choice per level of the taxonomy, next).
 
 ## Batching and fan-out
 
@@ -55,10 +89,34 @@ code where you can see and tune the rule.
   call per question; that cost 12x more and ran 10x slower in TypeSafe's own test.
 - **Speculative fan-out**: ask the questions for every branch at once and let code ignore the ones
   that don't apply. Cheaper than a second round trip.
-- Use a **second request** only when the first answer changes what you send: new state to fetch, a
-  narrower option list, or the next level of a taxonomy.
+- **State each speculative premise in the question.** A fan-out question is asked before you know
+  its branch applies, so write the premise in: "Assuming this ticket is a billing issue, is the
+  customer asking for a refund?" Without it, the model answers a question about a situation that
+  may not exist, and the number means nothing even when you do use it.
+- Use a **second request** only when an earlier answer is needed to build it: to fetch evidence you
+  don't have yet, to construct new state, or to decide the next option list (the next level of a
+  taxonomy, a narrower set of candidates). If the second request could have been written before
+  the first answer came back, it belongs in the first request.
 - **One question per item** beats one positional list when each item needs its own judgment;
   positional lookup degrades past roughly 16 items.
+
+## What confidence means
+
+`confidence` on a choice or score says how concentrated the probability distribution is. It does
+not say the answer is right, that the workflow is correct, or that you may act. (Nouls have no
+confidence field; distance from 0.5 plays that role.) Three consequences:
+
+- **Several acceptable options spread the probability.** If two options would both be fine ("which
+  of these three greetings suits the customer?"), low confidence is the correct output, not a
+  failure. Take the argmax and move on. Reserve confidence gates for choices where the options
+  lead to different consequences.
+- **Ignore uncertainty on branches you don't use.** In a fan-out, the questions for branches that
+  did not apply will often come back uncertain. They were never part of the decision; don't let
+  them trigger review or lower a combined score.
+- **Low confidence often means an option-list problem.** Overlapping options split the mass. Fix
+  the list (merge, or sharpen with `not_for`) before moving a threshold.
+
+Gate actions on what a mistake costs, using thresholds measured on the user's own data.
 
 ## Turning answers into decisions
 
@@ -74,6 +132,48 @@ code where you can see and tune the rule.
 - **Don't interpolate exact magnitudes** from a score's expected value, and don't compare absolute
   probabilities across differently worded questions.
 - Keep the questions and thresholds **in one file**. That file is what a human reviews.
+
+## Keep raw judgments, change policy in code
+
+- **Store the raw answers** (every noul, the full choice and score distributions) next to the item,
+  with the question-set version and model. Weights, filters, thresholds, and ranking formulas are
+  then code over stored numbers: changing them needs no new API call, and you can replay a policy
+  change over last month's traffic before shipping it.
+- **Never put the policy in the question.** "Considering that security matters twice as much as
+  style, how good is this PR?" bakes the weights into a number you can't take apart. Ask for
+  security and style separately and weight them in code.
+- **"Any serious violation" is not a weighted sum.** A sum lets four clean signals average away one
+  confident red flag. Write a veto as separate conditions: `if any(p[k] >= limit[k] for k in serious)`,
+  each with its own limit, and only then a weighted score for whatever is left.
+
+## When the state changes
+
+A judgment is about the state it was given, at the moment it was given.
+
+- **Keep inferred state apart from observed facts.** An answer from Jev ("probably a billing
+  issue", "likely the same entity") is an inference. Store it as one, with its probability and
+  what it was inferred from, in a different field from facts the system observed. Feeding an
+  inference back in as a fact in a later state makes the next answer confident about a guess.
+- **Check freshness before applying a result.** Between asking and acting, the ticket gets a reply,
+  the file is edited, the order ships. Record what the judgment read (a version, hash, or
+  timestamp) and compare before acting; if it moved, ask again. This matters most for queued work,
+  cached answers, and anything a person approves later.
+- A response cache must be keyed on the full state, the questions, and the model.
+
+## When a result is wrong, find which part failed
+
+Before changing a question or a threshold, sort the failure. Each kind has a different fix, and
+treating them all as "the model was wrong" leads to threshold churn.
+
+| Cause | Looks like | Fix |
+| --- | --- | --- |
+| **Missing evidence** | The state never held what was needed; the right candidate was not in the list | Fetch more, fix candidate coverage, add context |
+| **Model error** | The evidence was there and clear, and the answer was still wrong or unsure | Reword, add criteria, decompose further; keep the case in the eval set |
+| **Code error** | The answers were fine; thresholds, combination, or parsing mishandled them | Fix the policy code; stored raw judgments let you replay it |
+| **Service failure** | Timeout, rate limit, 5xx, partial response | The failure policy in [integration.md](integration.md), not a question change |
+
+Log enough to tell these apart afterwards: the state sent, the raw answers, the decision taken,
+and any error.
 
 ## A worked shape
 
