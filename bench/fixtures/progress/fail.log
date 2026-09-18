@@ -1,0 +1,12 @@
+> todo@1.2.0 test
+> vitest run
+
+ ✓ test/store.test.ts (6 tests) 12ms
+ ❯ test/list.test.ts (3 tests | 1 failed) 14ms
+   ✓ list > prints items
+   ✓ list > marks done items
+   × list > prints items as JSON with --json
+     → expected [ { id: 1, title: 'buy milk' }, …(1) ] to deeply equal [ { id: 1, title: 'buy milk', done: false }, …(1) ]
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  1 failed | 12 passed (13)

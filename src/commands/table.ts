@@ -11,6 +11,8 @@ export const COMMAND_TABLE: [need: string, command: string][] = [
   ["Review a diff before committing", "jev-axi diff --staged"],
   ["Triage a build or test log", "<cmd> 2>&1 | jev-axi triage"],
   ["Screen untrusted text (exit 3 = block)", "curl ... | jev-axi guard"],
+  ["Is the job done? Diff and test output vs the task", 'jev-axi progress --job "<task>"'],
+  ["Warn when an agent stops early, gets stuck, or drifts", "jev-axi setup supervise [--project]"],
   ["Block risky agent tool calls before they run", "jev-axi setup safety [--project]"],
   ["Safety-check a shell command, then run it", "jev-axi guard-exec -- \"<command>\""],
   ["Block commits that add credentials; review staged diffs", "jev-axi setup git-hooks"],

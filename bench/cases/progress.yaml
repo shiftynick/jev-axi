@@ -1,0 +1,41 @@
+recipe: progress
+description: Is the job done, and is the worker healthy? Verdicts from the fixed policy over hand-written diffs, logs, and tool-call tails.
+cases:
+  - name: complete-tested-passing
+    job: Add a --json flag to the list command that prints the items as JSON. Cover it with a test and mention it in the README.
+    file: bench/fixtures/progress/complete.diff
+    log: bench/fixtures/progress/pass.log
+    expect: { verdict: finish }
+  - name: complete-with-healthy-worker
+    job: Add a --json flag to the list command that prints the items as JSON. Cover it with a test and mention it in the README.
+    file: bench/fixtures/progress/complete.diff
+    log: bench/fixtures/progress/pass.log
+    events: bench/fixtures/progress/healthy.events.json
+    expect: { verdict: finish }
+  - name: stubbed-implementation
+    job: Add a --json flag to the list command that prints the items as JSON. Cover it with a test and mention it in the README.
+    file: bench/fixtures/progress/partial.diff
+    expect: { verdict: continue }
+  - name: complete-but-tests-failing
+    job: Add a --json flag to the list command that prints the items as JSON. Cover it with a test and mention it in the README.
+    file: bench/fixtures/progress/complete.diff
+    log: bench/fixtures/progress/fail.log
+    expect: { verdict: verify }
+  - name: behavior-change-without-test
+    job: Give pro customers 15% off orders over $500 (10% otherwise), and referred customers 5% off capped at $50.
+    file: bench/fixtures/patches/behavior-no-test.diff
+    expect: { verdict: verify }
+  - name: job-forbids-tests-and-running
+    job: Give pro customers 15% off orders over $500 (10% otherwise), and referred customers 5% off capped at $50. Only change src/pricing.ts; do not write tests and do not run anything.
+    file: bench/fixtures/patches/behavior-no-test.diff
+    expect: { verdict: finish }
+  - name: stuck-on-the-same-type-error
+    job: Add a --json flag to the list command that prints the items as JSON. Cover it with a test and mention it in the README.
+    file: bench/fixtures/progress/partial.diff
+    events: bench/fixtures/progress/stuck.events.json
+    expect: { verdict: steer }
+  - name: blocked-on-registry-credentials
+    job: Add a --json flag to the list command that prints the items as JSON. Cover it with a test and mention it in the README.
+    file: bench/fixtures/progress/partial.diff
+    events: bench/fixtures/progress/needs-human.events.json
+    expect: { verdict: escalate }

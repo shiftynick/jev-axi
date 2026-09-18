@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from "node:fs";
 import { numberFlag, parseArgs } from "../args.js";
 import { paths, resolvePrices } from "../config.js";
 import { round } from "../format.js";
@@ -7,6 +8,7 @@ import {
   formatCost,
   formatTokens,
   groupUsage,
+  projectName,
   readUsage,
   sparkline,
   sumBands,
@@ -19,7 +21,7 @@ import { finish, type Renderable } from "./common.js";
 export const STATS_HELP = `usage: jev-axi stats [--days N] [--top N] [--json]
 Lifetime usage and trends from the local stats ledger in your config folder: daily activity with sparklines,
 this period vs the previous one, per-command and per-project breakdowns, answer confidence, cache savings,
-and a projected monthly cost.
+and a projected monthly cost. When the supervision hooks are installed, also what they judged and how often they spoke.
 flags:
   --days <n>           trend window (default 30); the comparison period is the same length before it
   --top <n>            rows per breakdown (default 8)
@@ -105,6 +107,7 @@ export async function statsCommand(args: string[]): Promise<Renderable> {
     [`trend_cost_${sparkDays}d`]: sparkline(tail.map((d) => d.cost)),
     by_command: breakdown(current, "command"),
     by_project: breakdown(current, "project"),
+    ...superviseStats(cutoff),
     records: {
       biggest_call: `${biggest.cmd} on ${biggest.ts.slice(0, 10)}: ${formatTokens(biggest.in)} in, ${biggest.q} questions, ${formatCost(estimateCost(biggest.in, biggest.out))}`,
       busiest_day: `${busiest.day}: ${busiest.calls} calls`,
@@ -113,6 +116,33 @@ export async function statsCommand(args: string[]): Promise<Renderable> {
   const help: string[] = [];
   if (answered && bands.escalate / answered > 0.25) help.push("Over a quarter of answers land in the escalate band; narrower questions or clearer criteria usually raise confidence");
   if (cur.calls && cur.questions / cur.calls < 1.5) help.push("Most calls ask a single question; batching related questions into one `ask` costs almost nothing extra");
+  if (out["supervise"]) help.push("supervise: read `spoke_recently` against what really happened in those sessions before installing with --block");
   help.push(`Run \`jev-axi usage --by day\` for a day-by-day table, or \`jev-axi stats --days 7\` for a shorter window`);
   return finish(p, out, [], help);
+}
+
+const VERDICTS = ["finish", "verify", "continue", "steer", "escalate"] as const;
+
+/** What the supervision hooks judged in the window, and the last times they interrupted. Empty when never used. */
+export function superviseStats(cutoff: number, file = paths.superviseLog()): Record<string, unknown> {
+  if (!existsSync(file)) return {};
+  const entries: Record<string, any>[] = [];
+  for (const line of readFileSync(file, "utf8").split("\n")) {
+    try {
+      const e = JSON.parse(line);
+      if (e && typeof e.ts === "string" && new Date(e.ts).getTime() >= cutoff) entries.push(e);
+    } catch {
+      // skip partial lines
+    }
+  }
+  if (entries.length === 0) return {};
+  const spoke = (e: Record<string, any>) => e["action"] !== undefined && e["action"] !== "none";
+  const rows = ["stop", "post-tool-use"].flatMap((hook) => {
+    const list = entries.filter((e) => e["hook"] === hook);
+    if (list.length === 0) return [];
+    const count = (v: string) => list.filter((e) => e["verdict"] === v).length;
+    return [{ hook, checks: list.length, ...Object.fromEntries(VERDICTS.map((v) => [v, count(v)])), unclear: list.filter((e) => e["unclear"]).length, spoke: list.filter(spoke).length, blocked: list.filter((e) => e["action"] === "block").length }];
+  });
+  const recent = entries.filter(spoke).slice(-5).reverse().map((e) => ({ when: String(e["ts"]).slice(0, 16).replace("T", " "), project: projectName(String(e["cwd"] ?? "")), hook: e["hook"], action: e["action"], reason: e["reason"] }));
+  return { supervise: rows, ...(recent.length ? { spoke_recently: recent } : {}) };
 }

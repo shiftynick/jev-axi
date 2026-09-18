@@ -7,3 +7,5 @@ bench/results/*
 bench/agent/results/
 bench/transcripts/out/
 __pycache__/
+.claude/
+.codex/

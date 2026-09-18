@@ -1,0 +1,12 @@
+> todo@1.2.0 test
+> vitest run
+
+ ✓ test/store.test.ts (6 tests) 12ms
+ ✓ test/list.test.ts (3 tests) 8ms
+   ✓ list > prints items
+   ✓ list > marks done items
+   ✓ list > prints items as JSON with --json
+ ✓ test/done.test.ts (4 tests) 9ms
+
+ Test Files  3 passed (3)
+      Tests  13 passed (13)

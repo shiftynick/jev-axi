@@ -10,6 +10,7 @@ import { FIND_HELP, findCommand } from "./commands/find.js";
 import { DIFF_HELP, diffCommand } from "./commands/diff.js";
 import { FILES_HELP, filesCommand } from "./commands/files.js";
 import { TRIAGE_HELP, triageCommand } from "./commands/triage.js";
+import { PROGRESS_HELP, progressCommand } from "./commands/progress.js";
 import { GUARD_HELP, guardCommand } from "./commands/guard.js";
 import { COMMIT_HELP, commitCommand } from "./commands/commit.js";
 import { RECIPE_HELP, recipeCommand } from "./commands/recipe.js";
@@ -36,8 +37,8 @@ export const DESCRIPTION =
 export const TOP_HELP = `usage: jev-axi <command> [args] [flags]
 primitives[4]: pick, rate, check, ask
 batch[3]: rank, filter, find
-recipes[6]: diff, files, triage, guard, commit, recipe
-safety[4]: guard-exec, setup safety, setup git-hooks, hook
+recipes[7]: diff, files, triage, guard, progress, commit, recipe
+safety[5]: guard-exec, setup safety, setup supervise, setup git-hooks, hook
 meta[7]: (none)=status, models, usage, stats, cache, config, setup
 global flags:
   --json, --full, --model <name>, --no-cache, --act <p>, --confirm <p>, --help, -v/--version
@@ -68,6 +69,7 @@ export const HELP: Record<string, string> = {
   files: FILES_HELP,
   triage: TRIAGE_HELP,
   guard: GUARD_HELP,
+  progress: PROGRESS_HELP,
   commit: COMMIT_HELP,
   recipe: RECIPE_HELP,
   stats: STATS_HELP,
@@ -127,6 +129,7 @@ export async function main(argv = process.argv.slice(2), stdout?: { write: (chun
       files: wrap(filesCommand),
       triage: wrap(triageCommand),
       guard: wrap(guardCommand),
+      progress: wrap(progressCommand),
       commit: wrap(commitCommand),
       recipe: wrap(recipeCommand),
       stats: wrap(statsCommand),

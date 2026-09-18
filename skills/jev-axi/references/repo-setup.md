@@ -12,6 +12,7 @@ Only install these when the user asks for them. Each one sends text to TypeSafe'
 - [Choosing integrations](#choosing-integrations)
 - [Before installing anything](#before-installing-anything)
 - [Agent safety hook](#agent-safety-hook)
+- [Agent supervision hooks](#agent-supervision-hooks)
 - [Guarded commands in scripts, cron, and CI](#guarded-commands-in-scripts-cron-and-ci)
 - [Git hooks](#git-hooks)
 - [GitHub Action: pull request review and CI triage](#github-action-pull-request-review-and-ci-triage)
@@ -24,6 +25,7 @@ Only install these when the user asks for them. Each one sends text to TypeSafe'
 | The user wants to | Integration | Install |
 | --- | --- | --- |
 | Stop coding agents from running destructive, exfiltrating, or download-and-run commands | Agent safety hook | `jev-axi setup safety --project` |
+| Notice when a coding agent stops before the job is done, loops on the same failure, drifts, or needs a person | Agent supervision hooks | `jev-axi setup supervise --project` |
 | Check risky commands in scripts, cron jobs, runbooks, or CI steps before they run | `guard-exec` | Prefix the command: `jev-axi guard-exec -- "<command>"` |
 | Stop commits that add credentials; get warnings about debug leftovers and missing tests | Git hooks | `jev-axi setup git-hooks` |
 | Review every pull request and explain failed CI runs as PR comments | GitHub Action | Add the workflow files below |
@@ -35,7 +37,7 @@ every contributor, with or without agents), plus the safety hook if agents run c
 
 ## Before installing anything
 
-1. **Key.** Local integrations (safety hook, git hooks, `guard-exec`) read the key from
+1. **Key.** Local integrations (safety and supervision hooks, git hooks, `guard-exec`) read the key from
    `TYPESAFE_API_KEY`, a `.env` file in the working directory, or `jev-axi config set apiKey`.
    The GitHub Action reads a repository secret. Run `jev-axi` to see `key: ok` or `key: missing`.
 2. **Installed CLI.** Hooks call `jev-axi` on PATH: `npm install -g jev-axi`. Git hooks skip
@@ -68,6 +70,36 @@ jev-axi setup safety --remove --project     # uninstall
   should show `decision: deny`.
 - Decisions that reached Jev are logged to `~/.config/jev-axi/stats/safety.jsonl`.
 - Restart the agent session after installing so it loads the hook.
+
+## Agent supervision hooks
+
+**For:** Claude Code working on multi-step jobs, where the cost is a turn that ends
+early or an agent that burns calls going nowhere.
+
+```sh
+jev-axi setup supervise --project                 # Claude Code: .claude/settings.json, warn-only
+jev-axi setup supervise --project --block         # re-run to switch mode
+jev-axi setup supervise --remove --project
+```
+
+- **Stop hook:** when a turn ends and the repository changed during the session, scores the job
+  against the diff and recent tool output. On a clear signal it shows the user a warning. Turns
+  with no changes make no API call; mid-range scores say nothing.
+- **PostToolUse hook:** keeps the last 30 tool calls locally and scores them every 10 calls. When
+  the agent looks stuck, off track, or blocked on a person, it adds a note to the agent's context.
+  It never blocks.
+- **Install warn-only.** The scores are not calibrated for the project, and a wrong "not done"
+  sends an agent back to finished work. Suggest `--block` only after the user has looked at the
+  `supervise` section of `jev-axi stats` from real sessions (the full log is
+  `~/.config/jev-axi/stats/supervise.jsonl`). With `--block`, the agent is sent
+  back at most once per stop.
+- **What leaves the machine:** the user's first and latest prompts, up to 20,000 characters of
+  diff (untracked files included), the tail of recent tool output, and the last 30 tool calls,
+  with credentials in known formats redacted. Credential files (`.env`, `*.pem`, `.npmrc`, ...) and
+  changes that predate the session are left out. This is more than the safety hook sends: confirm it.
+- The job is read from the session transcript. If it can't be read, the hooks do nothing.
+- **Check it:** `jev-axi setup status --project`; run any hook by hand with `--explain --input '<json>'`.
+- Restart the agent session after installing.
 
 ## Guarded commands in scripts, cron, and CI
 
@@ -204,6 +236,7 @@ git diff main..HEAD | jev-axi recipe run release-risk
 ```sh
 jev-axi setup safety --remove --project
 jev-axi setup safety --remove --project --agent codex
+jev-axi setup supervise --remove --project
 jev-axi setup git-hooks --remove
 jev-axi setup agent --remove --project
 ```

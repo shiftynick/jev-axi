@@ -14,7 +14,7 @@ it where a fast, cheap, calibrated call beats reading or reasoning:
 
 - **Safety:** block risky agent tool calls before they run (`setup safety`), gate shell
   commands in scripts and cron jobs (`guard-exec`), stop commits that add credentials
-  (`setup git-hooks`), and screen fetched pages, issues, and vendored docs for prompt
+  (`setup git-hooks`), notice when an agent stops early or gets stuck (`setup supervise`), and screen fetched pages, issues, and vendored docs for prompt
   injection (`guard`).
 - **Failures:** find the root cause in a long build or test log and tell flaky from real (`triage`).
 - **Reviews:** flag risky files, secrets, debug leftovers, and missing tests in a diff (`diff`).
@@ -47,6 +47,7 @@ jev-axi                       # live status: key, model, usage, commands
 | Which files a task touches | `jev-axi files "<task>" [dirs]` |
 | Triage a build or test log | `<cmd> 2>&1 \| jev-axi triage` |
 | Screen untrusted text | `curl ... \| jev-axi guard` (exit 3 on block) |
+| Is the job done? | `<test cmd> 2>&1 \| jev-axi progress --job "<task>"` (exit 3 unless finish) |
 | Check commit messages against diffs | `jev-axi commit [--range a..b]` |
 | Saved question sets (YAML) | `jev-axi recipe list \| run <name> \| new <name>` |
 | Show or clear the response cache | `jev-axi cache [clear [--stale]]` |
@@ -189,6 +190,46 @@ On 44 labeled tool calls (18 harmful, including base64-obfuscated deletes and di
 scripts) it blocks every harmful call and allows every routine one; see
 `bench/cases/safety.yaml`. Each checked call adds roughly half a second and a fraction of a
 cent.
+
+## Supervising an agent's work
+
+The safety hook judges one tool call at a time. Supervision judges the session: is the job
+actually done, and is the agent still getting anywhere? The idea comes from
+[foreman](https://github.com/thruwire/foreman), which runs Jev as a supervisor above a coding
+agent. jev-axi does not run the agent; it plugs the same questions into the agent's own hooks.
+
+```bash
+jev-axi setup supervise --project     # Claude Code Stop + PostToolUse hooks, warn-only
+jev-axi setup supervise --block       # send the agent back to work instead of warning
+jev-axi setup supervise --remove
+```
+
+- **Stop hook.** When the agent ends a turn and the repository has changes since the session
+  began, the job (the first and latest prompts from the transcript), a bounded diff, and the
+  most recent tool output are scored: implementation complete, tests sufficient, requirements
+  satisfied, needs verification. Turns with no changes cost nothing.
+- **PostToolUse hook.** The last 30 tool calls are kept locally. Every 10 calls they are scored
+  for: stuck in a loop, off track, blocked on a person. A concern adds a note to the agent's
+  context; it never blocks.
+- **Fixed policy.** Jev only scores. A short ordered policy picks the verdict: a person is needed
+  (`escalate`), stuck or off track (`steer`), then `continue`, `verify`, or `finish`. Scores
+  between the thresholds count as unclear, and the hooks say nothing.
+- **Bounded and redacted.** At most 20,000 characters of diff, 12,000 of output, and 30 events,
+  with credentials redacted, are sent. Credential files (`.env`, `*.pem`, `.npmrc`, ...) are left out
+  entirely, and so is anything that was already uncommitted when the session began. Every verdict is logged to `stats/supervise.jsonl`.
+
+The same judgment is available as a one-shot command, for scripts and other agents:
+
+```bash
+npm test 2>&1 | jev-axi progress --job "add a --json flag to the list command"
+jev-axi progress --job TASK.md --range main..HEAD --log test.log --events calls.json
+```
+
+These scores are not calibrated for your project. A wrong "not done" sends an agent back to
+finished work, so run warn-only first and check `jev-axi stats` (what the hooks judged, and the
+last times they spoke) before turning on `--block`. With
+`--block`, the agent is sent back at most once per stop. `bench/cases/progress.yaml` holds the
+labeled cases. Claude Code only for now.
 
 ## Guarded commands
 

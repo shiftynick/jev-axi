@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { configureAgent } from "./agent.js";
 import { configureGitHooks } from "./githooks.js";
-import { configureSafetyHook, safetyHookPath as configureSafetyHookPath, SAFETY_HOOK_COMMAND } from "./hook.js";
+import { configureSuperviseHooks, SUPERVISE_HOOK_COMMAND, configureSafetyHook, safetyHookPath as configureSafetyHookPath, SAFETY_HOOK_COMMAND } from "./hook.js";
 import type { Renderable as AxiRenderable } from "./common.js";
 import { AxiError, installSessionStartHooks, sessionStartHookStatus } from "axi-sdk-js";
 import { numberFlag, parseArgs } from "../args.js";
@@ -203,10 +203,13 @@ function statsView(): Record<string, unknown> {
   };
 }
 
-export const SETUP_HELP = `usage: jev-axi setup hooks [--project] | setup safety [--project] [--agent claude|codex] [--remove] | setup agent [--project] [--replace-explore] [--remove] | setup git-hooks [--remove] | setup status [--project]
+export const SETUP_HELP = `usage: jev-axi setup hooks [--project] | setup safety [--project] [--agent claude|codex] [--remove] | setup supervise [--project] [--block] [--remove] | setup agent [--project] [--replace-explore] [--remove] | setup git-hooks [--remove] | setup status [--project]
 hooks    SessionStart hooks (Claude Code, Codex, OpenCode) so each session starts with jev-axi context.
 safety   PreToolUse hook that checks Bash commands and edits outside the project before they run, and blocks or asks
          about destructive, exfiltrating, or security-weakening calls. Routine calls are decided locally. See \`jev-axi hook --help\`.
+supervise  Claude Code Stop and PostToolUse hooks: when the agent ends a turn, checks the changes against the job and
+         warns if it looks unfinished or unverified; during work, notes when the agent looks stuck, off track, or
+         blocked on a person. Warn-only unless --block. See \`jev-axi hook --help\`.
 agent    Claude Code subagent \`jev-explore\` that ranks files with jev-axi before reading them, for broad exploration.
          Claude Code tends to explore inside subagents, which never see skills or session hooks; this puts jev-axi there.
 git-hooks  pre-commit and commit-msg hooks in the current repository: blocks commits that add credentials (found
@@ -214,7 +217,8 @@ git-hooks  pre-commit and commit-msg hooks in the current repository: blocks com
 flags:
   --project            install into the current repository instead of the user profile
   --agent <name>       for safety: claude (default) or codex
-  --remove             for safety, agent, or git-hooks: uninstall
+  --block              for supervise: send the agent back to work (once per stop) instead of only warning the user
+  --remove             for safety, supervise, agent, or git-hooks: uninstall
   --replace-explore    for agent: install as \`Explore\`, overriding Claude Code's built-in explorer in this scope
 examples:
   jev-axi setup hooks
@@ -225,7 +229,7 @@ examples:
 `;
 
 export async function setupCommand(args: string[]): Promise<AxiRenderable> {
-  const p = parseArgs(args, { "--project": "bool", "--agent": "value", "--remove": "bool", "--replace-explore": "bool" }, "setup");
+  const p = parseArgs(args, { "--project": "bool", "--agent": "value", "--remove": "bool", "--replace-explore": "bool", "--block": "bool" }, "setup");
   const action = p.positional[0];
   const scope = p.bools["--project"] ? "project" : "user";
   if (action === "hooks") {
@@ -245,6 +249,18 @@ export async function setupCommand(args: string[]): Promise<AxiRenderable> {
           "Test it: echo '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"rm -rf ~/\"}}' | jev-axi hook pre-tool-use --explain",
         ];
     return { safety: { status, agent, scope, file }, ...(help.length ? { help } : {}) };
+  }
+  if (action === "supervise") {
+    const { file, changed } = configureSuperviseHooks(p.bools["--project"], p.bools["--remove"], p.bools["--block"]);
+    const status = p.bools["--remove"] ? (changed ? "removed" : "not installed (no-op)") : changed ? "installed" : "already installed (no-op)";
+    const help = p.bools["--remove"]
+      ? []
+      : [
+          "Restart Claude Code to activate it",
+          "The job, a bounded diff, and recent tool calls are sent to TypeSafe's API with secrets redacted",
+          "The scores are not calibrated for every project: check `jev-axi stats` after a few sessions before turning on --block",
+        ];
+    return { supervise: { status, mode: p.bools["--block"] ? "block" : "warn", scope, file }, ...(help.length ? { help } : {}) };
   }
   if (action === "agent") {
     const { file, status } = configureAgent(p.bools["--project"], p.bools["--remove"], p.bools["--replace-explore"]);
@@ -267,12 +283,21 @@ export async function setupCommand(args: string[]): Promise<AxiRenderable> {
         return "missing";
       }
     };
+    const superviseStatus = () => {
+      try {
+        const f = configureSafetyHookPath("claude", p.bools["--project"]);
+        return existsSync(f) && readFileSync(f, "utf8").includes(SUPERVISE_HOOK_COMMAND) ? "installed" : "missing";
+      } catch {
+        return "missing";
+      }
+    };
     return {
       hooks: { scope, claude: s.claude.installed ? "installed" : "missing", codex: s.codex.installed ? "installed" : "missing", opencode: s.opencode.installed ? "installed" : "missing" },
       safety: { scope, claude: safetyFile("claude"), codex: safetyFile("codex") },
+      supervise: { scope, claude: superviseStatus() },
     };
   }
-  throw new AxiError("Unknown setup action", "VALIDATION_ERROR", ["Run `jev-axi setup hooks`, `jev-axi setup safety`, `jev-axi setup agent`, `jev-axi setup git-hooks`, or `jev-axi setup status`"]);
+  throw new AxiError("Unknown setup action", "VALIDATION_ERROR", ["Run `jev-axi setup hooks`, `jev-axi setup safety`, `jev-axi setup supervise`, `jev-axi setup agent`, `jev-axi setup git-hooks`, or `jev-axi setup status`"]);
 }
 
 export function todayUsageLine(): string {

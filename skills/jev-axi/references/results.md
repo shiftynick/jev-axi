@@ -20,7 +20,8 @@ Errors print `error:` and `code:` with a `help:` hint on stdout. Exit code 2 mea
 fix the flags as the hint says. Commands that need input and get none say which flag or path to
 pass. Exit code 1 means an API problem: for `RATE_LIMITED` or `NETWORK`, retry once, then continue
 without jev-axi. `AUTH_REQUIRED` means no valid key: skip jev-axi for the rest of the
-task and tell the user in your final answer that no valid key is set. `guard` exits 3 on block.
+task and tell the user in your final answer that no valid key is set. `guard` exits 3 on block;
+`progress` exits 3 on any verdict other than `finish`.
 
 ## Limits
 

@@ -1,0 +1,13 @@
+diff --git a/src/commands/list.ts b/src/commands/list.ts
+--- a/src/commands/list.ts
++++ b/src/commands/list.ts
+@@ -4,9 +4,14 @@ import { loadItems } from "../store.js";
+ export function listCommand(args: string[]): string {
++  const json = args.includes("--json");
+   const items = loadItems();
++  if (json) {
++    // TODO: serialize items
++    throw new Error("not implemented");
++  }
+   return items.map((i) => `${i.done ? "x" : " "} ${i.id} ${i.title}`).join("\n");
+ }

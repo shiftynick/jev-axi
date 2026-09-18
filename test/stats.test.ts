@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { main } from "../src/cli.js";
+import { superviseStats } from "../src/commands/stats.js";
 import { dailySeries, projectName, sparkline, sumBands, trendLabel, type UsageEntry } from "../src/usage.js";
 
 describe("trend helpers", () => {
@@ -28,6 +29,32 @@ describe("trend helpers", () => {
     mkdirSync(join(dir, ".git"));
     mkdirSync(join(dir, "a", "b"), { recursive: true });
     expect(projectName(join(dir, "a", "b"))).toBe(basename(dir));
+  });
+});
+
+describe("supervise stats", () => {
+  it("counts verdicts per hook and lists the times a hook spoke", () => {
+    const file = join(mkdtempSync(join(tmpdir(), "jev-sup-")), "supervise.jsonl");
+    const now = Date.now();
+    const e = (o: Record<string, unknown>, ageDays = 0) => JSON.stringify({ ts: new Date(now - ageDays * 86_400_000).toISOString(), cwd: "/w/app", ...o });
+    writeFileSync(
+      file,
+      [
+        e({ hook: "stop", verdict: "finish", action: "none" }),
+        e({ hook: "stop", verdict: "continue", unclear: true, action: "none" }),
+        e({ hook: "stop", verdict: "verify", action: "block", reason: "untested" }),
+        e({ hook: "post-tool-use", verdict: "steer", action: "note", reason: "stuck" }),
+        e({ hook: "stop", verdict: "continue", action: "warn", reason: "old" }, 90),
+        "{ partial",
+      ].join("\n"),
+    );
+    const s = superviseStats(now - 30 * 86_400_000, file) as any;
+    expect(s.supervise).toEqual([
+      { hook: "stop", checks: 3, finish: 1, verify: 1, continue: 1, steer: 0, escalate: 0, unclear: 1, spoke: 1, blocked: 1 },
+      { hook: "post-tool-use", checks: 1, finish: 0, verify: 0, continue: 0, steer: 1, escalate: 0, unclear: 0, spoke: 1, blocked: 0 },
+    ]);
+    expect(s.spoke_recently.map((r: any) => r.reason)).toEqual(["stuck", "untested"]);
+    expect(superviseStats(now, join(tmpdir(), "missing.jsonl"))).toEqual({});
   });
 });
 

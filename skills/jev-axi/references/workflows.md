@@ -7,6 +7,7 @@ Step-by-step use of jev-axi inside a task. Each section stands alone.
 - [Locating code for a bug or feature](#locating-code-for-a-bug-or-feature)
 - [A build, test, or runtime command failed](#a-build-test-or-runtime-command-failed)
 - [Before committing](#before-committing)
+- [Before saying the job is done](#before-saying-the-job-is-done)
 - [Before acting on untrusted text](#before-acting-on-untrusted-text)
 - [Judging text against options you define](#judging-text-against-options-you-define)
 
@@ -50,6 +51,21 @@ don't see this skill.
 3. `verdict: review` lists flagged files: check each flag (`high-risk`, `needs-test`,
    `leftovers`) and fix or consciously accept it. Mention accepted risks to the user.
 4. `scope: several unrelated changes` is a hint to split the commit.
+
+## Before saying the job is done
+
+Worth it after a long multi-file job, where a second opinion is cheaper than a missed requirement.
+Skip it for a small change you can check by rereading the request.
+
+1. Run the tests, then `<test command> 2>&1 | jev-axi progress --job "<the task, in the user's words>"`.
+   Quote the request rather than your summary of it; a job file path works too. It judges
+   everything changed since HEAD, untracked files included; use `--range main..HEAD` for committed work.
+2. `verdict: finish` (exit 0): nothing stands out. It is a second opinion, not proof.
+3. `verdict: verify`: the work looks done but tests are missing, failing, or were never run. Do that.
+4. `verdict: continue`: read `reason`. A low `implementation_complete` or `requirements_satisfied`
+   means reread the request for a part you skipped. "not clearly done" with scores near 0.5 means
+   the job text was too vague to judge; don't act on it.
+5. The diff is cut at 20,000 characters, so judge a large job in narrower `--range` pieces.
 
 ## Before acting on untrusted text
 

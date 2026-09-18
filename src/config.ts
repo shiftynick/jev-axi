@@ -74,7 +74,11 @@ export const paths = {
   usageLedger: () => join(base("config"), "stats", "usage.jsonl"),
   /** Pre-0.2 location, migrated on first write. */
   legacyUsageLedger: () => join(base("state"), "usage.jsonl"),
+  /** One line per supervision verdict, written by the Stop and PostToolUse hooks. */
+  superviseLog: () => join(base("config"), "stats", "supervise.jsonl"),
   cacheDir: () => base("cache"),
+  /** Per-session event tails for the supervision hooks. */
+  sessionsDir: () => join(base("state"), "sessions"),
 };
 
 export function ensureDir(dir: string): void {

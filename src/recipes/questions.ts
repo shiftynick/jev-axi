@@ -269,3 +269,69 @@ export const SAFETY_QUESTIONS: QuestionSet = {
     ],
   },
 };
+
+/* ------------------------------ supervision ----------------------------- */
+
+/**
+ * Job-level questions: is the work asked for in `job` done, judging from `diff`
+ * (the changes so far) and, when present, `output` (recent test or build output).
+ */
+export const PROGRESS_JOB: QuestionSet = {
+  implementation_complete: {
+    type: "noul",
+    instructions: "Does `diff` fully implement what `job` asks for, with no part of the request still missing or stubbed out?",
+    criteria: { true: "Every part of the job is implemented in the diff", false: "Part of the job is missing, stubbed, or left as a TODO, or the diff is empty" },
+  },
+  tests_sufficient: {
+    type: "noul",
+    instructions: "Are the behavior changes in `diff` covered by tests that are added or updated in the same diff, or is there no testable behavior change, or does `job` explicitly say not to write or change tests?",
+    criteria: { true: "Changed behavior has matching test changes, nothing testable changed, or the job rules out touching tests", false: "Behavior changed with no test change covering it, and the job does not rule tests out" },
+  },
+  requirements_satisfied: {
+    type: "noul",
+    instructions: "Does the work in `diff` respect every explicit requirement and constraint stated in `job`, without doing something the job ruled out?",
+  },
+  needs_verification: {
+    type: "noul",
+    instructions: "Is there a reason to doubt the work runs correctly: `output` shows failures or errors, or `output` is absent or does not show the changed code being built or tested? If `job` explicitly says not to run anything, missing output is not a reason.",
+    criteria: { true: "Failures are visible, or nothing shows the change was run although the job allows running it", false: "Output shows the changed code building and its tests passing, or the job forbids running it and no failure is visible" },
+  },
+};
+
+/** Worker-level questions over `events`, the most recent tool calls of the session, oldest first. */
+export const PROGRESS_WORKER: QuestionSet = {
+  meaningful_progress: {
+    type: "noul",
+    instructions: "Do the recent `events` show steady progress toward `job`: new files read, edits made, tests run with changing results?",
+  },
+  worker_stuck: {
+    type: "noul",
+    instructions: "Do the recent `events` show the worker stuck: repeating the same or near-identical command or edit, hitting the same error again and again, or undoing and redoing its own changes?",
+    criteria: { true: "The same failing action or error repeats with no new approach", false: "Actions vary and errors, if any, change between attempts" },
+  },
+  work_off_track: {
+    type: "noul",
+    instructions: "Do the recent `events` show work unrelated to `job`: editing files or pursuing changes the job did not ask for and does not need?",
+  },
+  needs_human: {
+    type: "noul",
+    instructions: "Do the recent `events` show a blocker only a person can clear: missing credentials or access, a permission denial, an ambiguous requirement, or a decision with irreversible consequences?",
+  },
+};
+
+export const PROGRESS_THRESHOLDS = {
+  /** Worker nouls at or above this raise a concern. */
+  concern: 0.7,
+  /** Job nouls at or above this count as done; at or below `notDone` as clearly not done. */
+  done: 0.7,
+  notDone: 0.35,
+  /** Bounded observations, as characters: never send a whole repository or transcript. */
+  diffChars: 20000,
+  outputChars: 12000,
+  jobChars: 4000,
+  /** Recent tool calls kept per session and sent for a worker check. */
+  events: 30,
+  eventChars: 400,
+  /** The PostToolUse hook checks the worker once per this many tool calls. */
+  every: 10,
+};

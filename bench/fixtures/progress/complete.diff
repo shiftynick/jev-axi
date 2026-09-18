@@ -1,0 +1,35 @@
+diff --git a/src/commands/list.ts b/src/commands/list.ts
+--- a/src/commands/list.ts
++++ b/src/commands/list.ts
+@@ -4,9 +4,13 @@ import { loadItems } from "../store.js";
+-export function listCommand(args: string[]): string {
++export function listCommand(args: string[]): string {
++  const json = args.includes("--json");
+   const items = loadItems();
++  if (json) {
++    return JSON.stringify(items.map((i) => ({ id: i.id, title: i.title, done: i.done })), null, 2);
++  }
+   return items.map((i) => `${i.done ? "x" : " "} ${i.id} ${i.title}`).join("\n");
+ }
+diff --git a/test/list.test.ts b/test/list.test.ts
+--- a/test/list.test.ts
++++ b/test/list.test.ts
+@@ -10,3 +10,11 @@ describe("list", () => {
+     expect(listCommand([])).toContain("  1 buy milk");
+   });
++
++  it("prints items as JSON with --json", () => {
++    const out = JSON.parse(listCommand(["--json"]));
++    expect(out).toEqual([
++      { id: 1, title: "buy milk", done: false },
++      { id: 2, title: "ship release", done: true },
++    ]);
++  });
+ });
+diff --git a/README.md b/README.md
+--- a/README.md
++++ b/README.md
+@@ -20,3 +20,4 @@ Commands:
+   todo list            show all items
++  todo list --json     show all items as JSON, for scripts
+   todo done <id>       mark an item done
