@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -80,7 +80,8 @@ describe("setup safety", () => {
   const origCwd = process.cwd();
   afterEach(() => process.chdir(origCwd));
   it("installs idempotently, keeps other hooks, and removes cleanly", () => {
-    const dir = mkdtempSync(join(tmpdir(), "safety-setup-"));
+    // realpath: on macOS the temp dir is a symlink, and process.cwd() reports the resolved path.
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), "safety-setup-")));
     process.chdir(dir);
     const file = join(dir, ".claude", "settings.json");
     writeFileSync(join(mkdtempSync(join(tmpdir(), "x-")), "noop"), "");
