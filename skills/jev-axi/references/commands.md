@@ -150,7 +150,7 @@ Lines are tagged with ids and searched in windows of 255; results are merged acr
 flags:
   --top <n>            lines to show (default 5)
   --context <n>        extra lines of context around each hit (default 0)
-  --min <p>            hide lines below this probability (default 0.01)
+  --min <p>            hide lines below this weighted per-window relevance before merging (default 0.01)
 examples:
   jev-axi find "where is the retry delay decided?" src/net.ts
   jev-axi find "the first real error, not a warning" build.log --top 3

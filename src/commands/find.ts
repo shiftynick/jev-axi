@@ -16,7 +16,7 @@ Lines are tagged with ids and searched in windows of 255; results are merged acr
 flags:
   --top <n>            lines to show (default 5)
   --context <n>        extra lines of context around each hit (default 0)
-  --min <p>            hide lines below this probability (default 0.01)
+  --min <p>            hide lines below this weighted per-window relevance before merging (default 0.01)
 examples:
   jev-axi find "where is the retry delay decided?" src/net.ts
   jev-axi find "the first real error, not a warning" build.log --top 3
@@ -104,8 +104,8 @@ export async function findCommand(args: string[]): Promise<AxiRenderable> {
   }
   const norm = windows.length > 1 ? scored.reduce((s, x) => s + x.p, 0) || 1 : 1;
   const hits = scored
-    .map((x) => ({ ...x, p: x.p / norm }))
     .filter((x) => x.p >= min)
+    .map((x) => ({ ...x, p: x.p / norm }))
     .sort((a, b) => b.p - a.p)
     .slice(0, top);
 

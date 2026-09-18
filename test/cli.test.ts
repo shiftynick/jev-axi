@@ -131,6 +131,36 @@ describe("cli", () => {
     expect(out).toContain("hits[");
   });
 
+  it("keeps a high-probability hit in a later window of a large file", async () => {
+    const api = async (_url: unknown, init?: any) => {
+      const body = JSON.parse(init.body);
+      const state = String(body.state);
+      const exists = state.includes("THE RETRY DELAY") ? 0.9 : 0.1;
+      const answers: Record<string, unknown> = {};
+      for (const [id, q] of Object.entries<any>(body.questions)) {
+        if (q.type === "noul") {
+          answers[id] = { type: "noul", noul: exists };
+        } else if (q.type === "choice") {
+          const keys = Object.keys(q.criteria);
+          answers[id] = {
+            type: "choice",
+            choice: keys[0],
+            probabilities: Object.fromEntries(keys.map((key, i) => [key, i === 0 ? 0.7 : 0.3 / Math.max(1, keys.length - 1)])),
+            confidence: 0.9,
+          };
+        }
+      }
+      return new Response(JSON.stringify({ model: "jev-test", answers, usage: { input_tokens: 1, output_tokens: 1 } }), { status: 200 });
+    };
+    configureFetch(api as any);
+    writeFileSync(join(dir, "large.ts"), Array.from({ length: 26_000 }, (_, i) => i === 255 ? "THE RETRY DELAY IS DECIDED HERE" : `ordinary source line ${i}`).join("\n"));
+    await main(["find", "where is the retry delay decided?", join(dir, "large.ts"), "--min", "0.5", "--no-cache"], stdout);
+    expect(out).toContain("answer_exists: 0.9");
+    expect(out).toContain("count: 1 shown");
+    expect(out).toContain("THE RETRY DELAY IS DECIDED HERE");
+    expect(out).not.toContain("ordinary source line 0");
+  });
+
   it("fails loud on unknown flags with exit code 2", async () => {
     await main(["check", "q", "--bogus", "--text", "x"], stdout);
     expect(process.exitCode).toBe(2);
