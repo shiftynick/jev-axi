@@ -62,7 +62,8 @@ describe("stdin held open but idle", () => {
     expect(out).toContain("diff: working tree changes");
   }, 30_000);
 
-  it("still reads a pipe whose producer is slow to start", () => {
+  // Needs a POSIX shell pipeline; under Windows the runner's `sh` hands node a stdin that was never treated as piped input.
+  it.skipIf(process.platform === "win32")("still reads a pipe whose producer is slow to start", () => {
     const dir = mkdtempSync(join(tmpdir(), "jev-stdin-"));
     const r = spawnSync("sh", ["-c", `(sleep 2; echo hello; echo world) | "${process.execPath}" "${TSX}" "${BIN}" rank q`], {
       cwd: dir,
