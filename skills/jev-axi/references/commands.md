@@ -187,6 +187,7 @@ Review a diff before committing.
 usage: jev-axi diff [--staged | --range <a..b> | --file <patch> | -]
 Review a diff before committing: per-file risk, missing tests, secrets, debug leftovers, plus overall scope and kind.
 Credentials in known formats are detected locally and redacted before anything is sent.
+Vendor token formats and private keys block; looser shapes (auth headers, URL passwords, PASSWORD= values) flag possible-secret for review.
 Defaults to unstaged working-tree changes. Files are chunked to the token budget; large patches are truncated to 6000 chars.
 flags:
   --staged             review the index (what `git commit` would include)

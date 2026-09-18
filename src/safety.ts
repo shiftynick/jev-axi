@@ -41,9 +41,9 @@ const SECRET_PATTERNS: [RegExp, string][] = [
   [/\bxox[abposr]-[A-Za-z0-9-]{10,}/g, "[REDACTED SLACK TOKEN]"],
   [/\bapikey_[A-Za-z0-9_]{16,}/g, "[REDACTED API KEY]"],
   [/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g, "[REDACTED JWT]"],
-  [/(\b(?:bearer|basic)\s+)[A-Za-z0-9._~+/=-]{12,}/gi, "$1[REDACTED]"],
-  [/([a-z][a-z0-9+.-]*:\/\/[^:\s/@]+:)[^@\s]+@/gi, "$1[REDACTED]@"],
-  [/\b([A-Z0-9_]*(?:PASSWORD|PASSWD|SECRET|TOKEN|API_?KEY|PRIVATE_KEY|ACCESS_KEY)[A-Z0-9_]*\s*[=:]\s*)(?!\[REDACTED)("[^"]*"|'[^']*'|[^\s'";&|]+)/gi, "$1[REDACTED]"],
+  [/(\b(?:bearer|basic)\s+)[A-Za-z0-9._~+/=-]{12,}/gi, "$1[REDACTED AUTH TOKEN]"],
+  [/([a-z][a-z0-9+.-]*:\/\/[^:\s/@]+:)[^@\s]+@/gi, "$1[REDACTED URL PASSWORD]@"],
+  [/\b([A-Z0-9_]*(?:PASSWORD|PASSWD|SECRET|TOKEN|API_?KEY|PRIVATE_KEY|ACCESS_KEY)[A-Z0-9_]*\s*[=:]\s*)(?!\[REDACTED)("[^"]*"|'[^']*'|[^\s'";&|]+)/gi, "$1[REDACTED VALUE]"],
 ];
 
 /** Credentials matched by the specific patterns (private keys, vendor token formats, JWTs). */
@@ -51,6 +51,32 @@ export function findStrongSecrets(text: string): string[] {
   const kinds: string[] = [];
   for (const [re, replacement] of SECRET_PATTERNS.slice(0, STRONG_SECRET_COUNT)) {
     if (new RegExp(re.source, re.flags.replace("g", "")).test(text)) kinds.push(replacement.replace(/^\[REDACTED |\]$/g, "").toLowerCase());
+  }
+  return kinds;
+}
+
+/** Values that are clearly not a literal credential: references, placeholders, type names. */
+const NOT_A_LITERAL = /^(?:\$|<|%|\{\{|process\.env|os\.environ|import\.meta|(?:string|number|boolean|null|undefined|true|false|none)\b)|^[*x.]+$/i;
+
+/**
+ * Credentials matched only by the generic patterns (auth headers, URL passwords,
+ * `PASSWORD=`-style assignments). Too loose to block on, but redaction hides the value
+ * from the model, so they have to be reported locally or nothing judges them.
+ */
+export function findPossibleSecrets(text: string): string[] {
+  const kinds: string[] = [];
+  const [bearer, url, assign] = SECRET_PATTERNS.slice(STRONG_SECRET_COUNT).map(([re]) => new RegExp(re.source, re.flags.replace("g", "")));
+  if (bearer!.test(text)) kinds.push("auth token");
+  const u = url!.exec(text);
+  if (u && !NOT_A_LITERAL.test(u[0].slice(u[1]!.length))) kinds.push("url password");
+  const a = assign!.exec(text);
+  if (a) {
+    const raw = a[2]!;
+    const quoted = /^["']/.test(raw);
+    const value = raw.replace(/^["']|["']$/g, "");
+    // Unquoted values only count in dotenv-style `NAME=value` lines; `password: string` is a type, `token = getToken()` a call.
+    const dotenv = /^\s*(?:export\s+)?[A-Z0-9_]+=/.test(text);
+    if (value.length >= 8 && (quoted || dotenv) && !NOT_A_LITERAL.test(value) && !/[()]/.test(value)) kinds.push("credential value");
   }
   return kinds;
 }

@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { AxiError, validation } from "./errors.js";
-import { findStrongSecrets } from "./safety.js";
+import { findPossibleSecrets, findStrongSecrets } from "./safety.js";
 
 export function runGit(args: string[], cwd = process.cwd()): string {
   const r = spawnSync("git", ["--no-pager", ...args], { cwd, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
@@ -108,6 +108,18 @@ export interface SecretHit {
 
 /** Strong credential patterns on added lines, with new-file line numbers. Runs locally only. */
 export function scanAddedLines(files: FileDiff[]): SecretHit[] {
+  return scanAdded(files, findStrongSecrets);
+}
+
+/**
+ * Looser credential shapes on added lines (auth headers, URL passwords, `PASSWORD=` assignments).
+ * They are redacted before sending, so this local pass is the only thing that can report them.
+ */
+export function scanPossibleSecrets(files: FileDiff[]): SecretHit[] {
+  return scanAdded(files, findPossibleSecrets);
+}
+
+function scanAdded(files: FileDiff[], find: (text: string) => string[]): SecretHit[] {
   const hits: SecretHit[] = [];
   for (const f of files) {
     let line = 0;
@@ -123,7 +135,7 @@ export function scanAddedLines(files: FileDiff[]): SecretHit[] {
       if (text.startsWith("+")) {
         // Private keys span lines: test the added block that starts here.
         const block = text.includes("-----BEGIN") ? lines.slice(i, i + 80).filter((l) => l.startsWith("+")).map((l) => l.slice(1)).join("\n") : text.slice(1);
-        for (const kind of findStrongSecrets(block)) hits.push({ file: f.path, line, kind });
+        for (const kind of find(block)) hits.push({ file: f.path, line, kind });
         line++;
       } else if (text.startsWith(" ")) line++;
     }

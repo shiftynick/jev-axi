@@ -67,6 +67,7 @@ export async function preCommitHook(args: string[]): Promise<Renderable> {
   if (block) process.exitCode = 1;
   const help: string[] = [];
   if (review.flagged.some((v) => v.flags.includes("secrets"))) help.push("secrets: a file may add a credential; check it before pushing");
+  if (review.flagged.some((v) => v.flags.includes("possible-secret"))) help.push("possible-secret: an added line looks like a credential (auth header, URL password, or PASSWORD=/TOKEN= value); check it before pushing");
   if (review.flagged.some((v) => v.flags.includes("leftovers"))) help.push("leftovers: debug output, commented-out code, or TODO markers");
   if (review.flagged.some((v) => v.flags.includes("needs-test"))) help.push("needs-test: behavior changed with no test change");
   if (review.scopeLevel === 2) help.push("The staged changes look like several unrelated changes; consider separate commits");

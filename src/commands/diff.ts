@@ -4,7 +4,7 @@ import { evaluate, type ChoiceAnswer, type EvalOptions, type EvalResult, type No
 import type { Thresholds } from "../config.js";
 import { validation } from "../errors.js";
 import { round } from "../format.js";
-import { isTestPath, loadDiff, parseDiff, scanAddedLines, testStem, type FileDiff } from "../git.js";
+import { isTestPath, loadDiff, parseDiff, scanAddedLines, scanPossibleSecrets, testStem, type FileDiff } from "../git.js";
 import { estimateTokens, STATE_TOKEN_BUDGET } from "../items.js";
 import { DIFF_OVERALL, DIFF_PER_FILE, DIFF_THRESHOLDS } from "../recipes/questions.js";
 import { isStdinTTY, readImplicitStdin, readStdinSync } from "../stdin.js";
@@ -15,6 +15,7 @@ import { evalOptions, finish, thresholdsFrom, type Renderable } from "./common.j
 export const DIFF_HELP = `usage: jev-axi diff [--staged | --range <a..b> | --file <patch> | -]
 Review a diff before committing: per-file risk, missing tests, secrets, debug leftovers, plus overall scope and kind.
 Credentials in known formats are detected locally and redacted before anything is sent.
+Vendor token formats and private keys block; looser shapes (auth headers, URL passwords, PASSWORD= values) flag possible-secret for review.
 Defaults to unstaged working-tree changes. Files are chunked to the token budget; large patches are truncated to ${DIFF_THRESHOLDS.patchChars} chars.
 flags:
   --staged             review the index (what \`git commit\` would include)
@@ -75,6 +76,7 @@ export async function diffCommand(args: string[]): Promise<Renderable> {
   };
   const help: string[] = [];
   if (secretsHit) help.push("A file appears to add a real credential; remove it before committing");
+  if (flagged.some((v) => v.flags.includes("possible-secret"))) help.push("possible-secret: an added line looks like a credential (auth header, URL password, or PASSWORD=/TOKEN= value); it was redacted, so check it yourself");
   if (flagged.some((v) => v.flags.includes("needs-test"))) help.push("needs-test: behavior changed with no test change in the diff");
   if (scopeLevel === 2) help.push("Consider splitting this into separate commits or PRs");
   if (!p.bools["--full"] && shown.length < verdicts.length) help.push(`Add --full to see all ${verdicts.length} files`);
@@ -105,6 +107,8 @@ export async function reviewFiles(files: FileDiff[], options: EvalOptions, t: Th
 
   // Credentials never leave the machine: known formats are found locally and redacted before sending.
   const localSecrets = new Set(scanAddedLines(files).map((h) => h.file));
+  // Looser shapes are redacted too, so the model cannot judge them: report them here, as review rather than block.
+  const possibleSecrets = new Set(scanPossibleSecrets(files).map((h) => h.file));
   // Chunk files to the budget, truncating oversized patches.
   const prepared = files.map((f, i) => ({ id: `F${String(i + 1).padStart(3, "0")}`, f, patch: redactSecrets(truncatePatch(f)) }));
   const chunks: typeof prepared[] = [];
@@ -140,11 +144,12 @@ export async function reviewFiles(files: FileDiff[], options: EvalOptions, t: Th
       const noul = (k: string) => (r.answers[`${c.id}.${k}`] as NoulAnswer).noul;
       const flags: string[] = [];
       if (localSecrets.has(c.f.path) || noul("secrets") >= DIFF_THRESHOLDS.flag) flags.push("secrets");
+      else if (possibleSecrets.has(c.f.path)) flags.push("possible-secret");
       if (!isTestPath(c.f.path) && !testedStems.has(testStem(c.f.path)) && noul("needs_test") >= needsTestFlag) flags.push("needs-test");
       if (noul("leftovers") >= DIFF_THRESHOLDS.flag) flags.push("leftovers");
       if (risk.score >= DIFF_THRESHOLDS.highRisk) flags.push("high-risk");
       verdicts.push({
-        file: c.f.path + (c.patch.length < c.f.patch.length ? " (truncated)" : ""),
+        file: c.f.path + (c.f.patch.length > DIFF_THRESHOLDS.patchChars ? " (truncated)" : ""),
         "+/-": `+${c.f.added}/-${c.f.removed}`,
         risk: round(risk.score),
         band: bandForConfidence(risk.confidence, t),
