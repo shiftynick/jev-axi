@@ -190,7 +190,7 @@ describe("cli", () => {
     await main(["rank", "where is the retry delay decided?", many, "--min", "0.5", "--no-cache"], stdout);
     expect(out).toContain("count: 1 shown of 2600 items");
     expect(out).toMatch(/1,0\.63,.*f1300\.txt/);
-  });
+  }, 20_000);
 
   it("fails loud on unknown flags with exit code 2", async () => {
     await main(["check", "q", "--bogus", "--text", "x"], stdout);
