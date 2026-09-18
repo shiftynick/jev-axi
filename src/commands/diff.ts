@@ -46,7 +46,7 @@ export async function diffCommand(args: string[]): Promise<Renderable> {
     if (!stdin || stdin.trim() === "") throw validation("`diff -` needs a diff piped on stdin", ["git diff | jev-axi diff -", "Run `jev-axi diff` with no arguments to review working-tree changes"]);
   } else if (!sourceFlags) {
     // A piped diff wins; otherwise review the working tree (agents run with empty stdin).
-    stdin = readImplicitStdin();
+    stdin = readImplicitStdin("optional");
   }
   const { text, label } = loadDiff({
     staged: p.bools["--staged"],
