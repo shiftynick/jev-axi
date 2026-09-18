@@ -21,6 +21,8 @@ export interface JevConfig {
   thresholds?: Partial<Thresholds>;
   /** Hours a cached response stays valid; 0 disables the cache. */
   cacheTtlHours?: number;
+  /** false turns off the daily npm registry check behind the update notice. */
+  updateCheck?: boolean;
 }
 
 export const DEFAULT_CACHE_TTL_HOURS = 24;
@@ -79,6 +81,9 @@ export const paths = {
   cacheDir: () => base("cache"),
   /** Per-session event tails for the supervision hooks. */
   sessionsDir: () => join(base("state"), "sessions"),
+  stateDir: () => base("state"),
+  /** Latest published version and when it was last looked up. */
+  updateCheck: () => join(base("state"), "update-check.json"),
 };
 
 export function ensureDir(dir: string): void {

@@ -20,6 +20,8 @@ to avoid reading code you need to understand.
 
 Run `jev-axi` with no arguments. It prints `key: ok` or `key: missing` and the available commands.
 
+- **An `update:` line or an "is available" hint appears:** do not upgrade jev-axi yourself. Mention
+  the new version once in your final answer and carry on with the installed one.
 - **Command not found:** install it with `npm install -g jev-axi`. `npx -y jev-axi <command>` also
   works but adds startup time to every call.
 - **`key: missing`, or any command fails with `code: AUTH_REQUIRED`:** skip jev-axi for the rest

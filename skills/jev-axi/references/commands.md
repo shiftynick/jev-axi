@@ -561,6 +561,7 @@ keys:
   price.output     USD per 1M output tokens (default 0)
   act, confirm     band thresholds on confidence (default 0.75 / 0.45)
   cacheTtlHours    hours a cached response is reused (default 24; 0 disables the cache)
+  updateCheck      false turns off the daily npm registry lookup behind the "update available" notice (default true)
 examples:
   jev-axi config
   jev-axi config set model jev-preview

@@ -374,7 +374,11 @@ fetched pages, or tool calls) to TypeSafe's API, which bills per request. The sa
 `guard-exec`, `diff`, `triage`, the git hooks, and the GitHub Action redact credentials in
 known formats first, and the safety checks decide routine calls locally. Other commands send
 their input as given, and redaction only catches recognizable credential formats, so don't
-point jev-axi at data you can't share with TypeSafe. Nothing else leaves the machine. Locally, jev-axi stores the API key (if set with `config set`),
+point jev-axi at data you can't share with TypeSafe. The only other request is a version lookup:
+the bare `jev-axi` status screen and `jev-axi config` ask the npm registry for the latest release at
+most once a day, and show one line when there is a newer one (errors that an upgrade might fix repeat
+it from the saved result). No other command makes that request. Turn it off with
+`jev-axi config set updateCheck false` or `NO_UPDATE_NOTIFIER=1`; it is always off when `CI` is set. Locally, jev-axi stores the API key (if set with `config set`),
 cached answers keyed by a hash of the request, the usage ledger (command, model, tokens,
 latency, project name, confidence bands), and the safety audit log.
 

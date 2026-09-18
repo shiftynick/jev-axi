@@ -1,6 +1,7 @@
 import { AxiError, exitCodeForError, runAxiCli } from "axi-sdk-js";
 import { encode } from "@toon-format/toon";
 import { renderHelp, renderWithHelp, type Renderable } from "./commands/common.js";
+import { availableUpdate, updateHelp } from "./update.js";
 import { VERSION } from "./version.js";
 import { homeCommand } from "./commands/home.js";
 import { ASK_HELP, askCommand } from "./commands/ask.js";
@@ -88,10 +89,16 @@ const wrap = (cmd: Cmd) => async (args: string[]) => {
   return typeof out === "string" ? out : renderWithHelp(out);
 };
 
+/** Failures a newer release may already fix; bad arguments and rate limits are not among them. */
+const UPDATE_HINT_CODES = new Set(["AUTH_REQUIRED", "API_ERROR", "UNKNOWN"]);
+
 export function formatError(error: unknown): { output: string; exitCode: number } {
   const e = error instanceof AxiError ? error : new AxiError(error instanceof Error ? error.message : String(error), "UNKNOWN");
+  // Local state only: a failing command never waits on the registry.
+  const update = UPDATE_HINT_CODES.has(e.code) ? availableUpdate() : undefined;
+  const suggestions = update ? [...e.suggestions, updateHelp(update)] : e.suggestions;
   return {
-    output: [encode({ error: e.message, code: e.code }), renderHelp(e.suggestions)].filter(Boolean).join("\n") + "\n",
+    output: [encode({ error: e.message, code: e.code }), renderHelp(suggestions)].filter(Boolean).join("\n") + "\n",
     exitCode: exitCodeForError(e),
   };
 }

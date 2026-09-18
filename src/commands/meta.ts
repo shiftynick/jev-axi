@@ -22,6 +22,8 @@ import {
   type JevConfig,
 } from "../config.js";
 import { validation } from "../errors.js";
+import { availableUpdate, refreshUpdateCheck, updateHelp, updateLine } from "../update.js";
+import { VERSION } from "../version.js";
 import { round } from "../format.js";
 import { estimateCost, formatCost, formatTokens, groupUsage, readUsage, totals, type GroupBy } from "../usage.js";
 
@@ -105,6 +107,7 @@ keys:
   price.output     USD per 1M output tokens (default ${DEFAULT_PRICE.output})
   act, confirm     band thresholds on confidence (default ${DEFAULT_THRESHOLDS.act} / ${DEFAULT_THRESHOLDS.confirm})
   cacheTtlHours    hours a cached response is reused (default ${DEFAULT_CACHE_TTL_HOURS}; 0 disables the cache)
+  updateCheck      false turns off the daily npm registry lookup behind the "update available" notice (default true)
 examples:
   jev-axi config
   jev-axi config set model jev-preview
@@ -115,7 +118,10 @@ export async function configCommand(args: string[]): Promise<AxiRenderable> {
   const p = parseArgs(args, {}, "config");
   const [action, key, value] = p.positional;
   const config = readConfig();
-  if (!action) return showConfig(config);
+  if (!action) {
+    await refreshUpdateCheck(undefined, config);
+    return showConfig(config);
+  }
   if (action !== "set" && action !== "unset") throw validation(`unknown config action ${JSON.stringify(action)}`, ["jev-axi config set <key> <value>", "jev-axi config unset <key>"]);
   if (!key) throw validation(`config ${action} needs a key`, [CONFIG_HELP.split("\n").slice(3, 8).join("; ")]);
   if (action === "set" && value === undefined) throw validation(`config set ${key} needs a value`);
@@ -140,20 +146,27 @@ function applyConfig(c: JevConfig, key: string, value: string | undefined): JevC
     case "act": next.thresholds!.act = num(); break;
     case "confirm": next.thresholds!.confirm = num(); break;
     case "cacheTtlHours": next.cacheTtlHours = num(); break;
-    default: throw validation(`unknown config key ${JSON.stringify(key)}`, ["valid keys: apiKey, model, price.input, price.output, act, confirm, cacheTtlHours"]);
+    case "updateCheck":
+      if (value !== undefined && value !== "true" && value !== "false") throw validation("updateCheck must be true or false");
+      next.updateCheck = value === undefined ? undefined : value === "true";
+      break;
+    default: throw validation(`unknown config key ${JSON.stringify(key)}`, ["valid keys: apiKey, model, price.input, price.output, act, confirm, cacheTtlHours, updateCheck"]);
   }
   return next;
 }
 
 function showConfig(c: JevConfig): Record<string, unknown> {
   const key = resolveApiKey(c);
+  const update = availableUpdate(c);
   return {
+    version: update ? `${VERSION}; ${updateLine(update)}` : VERSION,
     file: paths.configFile(),
     apiKey: key.key ? `${redactKey(key.key)} (from ${key.source})` : "missing",
     model: resolveModel(undefined, c),
     price: `$${resolvePrices(c).input}/1M in, $${resolvePrices(c).output}/1M out${c.price?.input === undefined && c.price?.output === undefined ? " (default)" : ""}`,
     thresholds: `act >= ${c.thresholds?.act ?? DEFAULT_THRESHOLDS.act}, confirm >= ${c.thresholds?.confirm ?? DEFAULT_THRESHOLDS.confirm}`,
     cache: `${cacheCount()} responses in ${paths.cacheDir()}, reused for ${resolveCacheTtlHours(c)}h`,
+    ...(update ? { help: [updateHelp(update)] } : {}),
   };
 }
 
