@@ -28,7 +28,7 @@ reading the code. Use it for judgments, not as a replacement for reading.
 
 ```sh
 npm install -g jev-axi        # or: npx -y jev-axi ...
-export TYPESAFE_API_KEY=...   # or put it in ./.env, or `jev-axi config set apiKey ...`
+export TYPESAFE_API_KEY=...   # or put it in .env.local / .env (found from the current directory up to the repo root), or `jev-axi config set apiKey ...`
 jev-axi                       # live status: key, model, usage, commands
 ```
 

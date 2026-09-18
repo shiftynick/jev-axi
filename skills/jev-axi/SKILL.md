@@ -25,7 +25,9 @@ Run `jev-axi` with no arguments. It prints `key: ok` or `key: missing` and the a
 - **`key: missing`, or any command fails with `code: AUTH_REQUIRED`:** skip jev-axi for the rest
   of the task and do the work with your own tools.
   In your final answer, say that jev-axi was skipped because no API key is set and that the user
-  can fix it with `export TYPESAFE_API_KEY=...` or `jev-axi config set apiKey <key>`. The user
+  can fix it with `export TYPESAFE_API_KEY=...` or `jev-axi config set apiKey <key>`. The key is
+  also read from `.env.local` or `.env` between the working directory and the repo root, and the
+  error lists where it looked; repeat that rather than claiming no key exists anywhere. The user
   installed this skill expecting it to run, so a silent skip hides a setup problem.
 
 ## Never send secrets

@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 export interface Prices {
   /** USD per 1M input tokens. */
@@ -100,13 +100,36 @@ export function writeConfig(config: JevConfig): void {
   writeFileSync(paths.configFile(), JSON.stringify(config, null, 2) + "\n", { mode: 0o600 });
 }
 
-/** Read TYPESAFE_API_KEY from a .env in the working directory, if present. */
-function dotenvKey(cwd = process.cwd()): string | undefined {
-  const file = join(cwd, ".env");
-  if (!existsSync(file)) return undefined;
-  for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
-    const m = /^\s*(?:export\s+)?TYPESAFE_API_KEY\s*=\s*(.+?)\s*$/.exec(line);
-    if (m) return m[1]!.replace(/^["']|["']$/g, "");
+/** Framework precedence: `.env.local` holds real secrets, `.env` committed defaults. */
+const DOTENV_FILES = [".env.local", ".env"];
+
+/** Directories searched for a dotenv key: the working directory up to the git root (or the filesystem root outside a repo). */
+export function dotenvSearchDirs(cwd = process.cwd()): string[] {
+  const dirs: string[] = [];
+  for (let dir = resolve(cwd); ; dir = dirname(dir)) {
+    dirs.push(dir);
+    if (existsSync(join(dir, ".git")) || dirname(dir) === dir) return dirs;
+  }
+}
+
+/** Read TYPESAFE_API_KEY from the nearest .env.local or .env, if present. */
+function dotenvKey(cwd = process.cwd()): { key: string; file: string } | undefined {
+  for (const dir of dotenvSearchDirs(cwd)) {
+    for (const name of DOTENV_FILES) {
+      const file = join(dir, name);
+      if (!existsSync(file)) continue;
+      let text: string;
+      try {
+        text = readFileSync(file, "utf8");
+      } catch {
+        continue;
+      }
+      for (const line of text.split(/\r?\n/)) {
+        const m = /^\s*(?:export\s+)?TYPESAFE_API_KEY\s*=\s*(.+?)\s*$/.exec(line);
+        const key = m?.[1]!.replace(/^["']|["']$/g, "");
+        if (key) return { key, file };
+      }
+    }
   }
   return undefined;
 }
@@ -114,15 +137,24 @@ function dotenvKey(cwd = process.cwd()): string | undefined {
 export interface ResolvedKey {
   key?: string;
   source: "env" | ".env" | "config" | "missing";
+  /** The dotenv file the key came from, when source is ".env". */
+  file?: string;
 }
 
 export function resolveApiKey(config = readConfig()): ResolvedKey {
   const env = process.env["TYPESAFE_API_KEY"]?.trim();
   if (env) return { key: env, source: "env" };
   const dot = dotenvKey();
-  if (dot) return { key: dot, source: ".env" };
+  if (dot) return { key: dot.key, source: ".env", file: dot.file };
   if (config.apiKey) return { key: config.apiKey, source: "config" };
   return { source: "missing" };
+}
+
+/** Where a missing key was looked for, for error messages. */
+export function keySearchDescription(cwd = process.cwd()): string {
+  const dirs = dotenvSearchDirs(cwd);
+  const span = dirs.length > 1 ? `from ${dirs[0]} up to ${dirs[dirs.length - 1]}` : `in ${dirs[0]}`;
+  return `Looked for TYPESAFE_API_KEY in the environment, .env.local and .env ${span}, and ${paths.configFile()}`;
 }
 
 export function resolveModel(override?: string, config = readConfig()): string {
