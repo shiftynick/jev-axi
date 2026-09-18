@@ -26,7 +26,7 @@ flags:
   --on-error <mode>    when Jev is unreachable or slow: allow (default, normal flow), ask, or deny
   --explain            print the decision, scores, and reason as TOON instead of hook JSON
 install: jev-axi setup safety [--project] [--agent claude|codex]
-supervision hooks for Claude Code (install: jev-axi setup supervise [--project] [--block]):
+supervision hooks for Claude Code and Codex (install: jev-axi setup supervise [--project] [--agent claude|codex] [--block]):
   stop [--block]       when the agent ends its turn with changes in the repository, scores whether the job from the
                        transcript is implemented, tested, and verified. Warns the user on a clear signal only; with --block it
                        sends the agent back to work once per stop, with the reason. Turns with no changes are skipped.
@@ -198,13 +198,13 @@ async function superviseHook(name: "stop" | "post-tool-use", args: string[]): Pr
 export const SUPERVISE_HOOK_COMMAND = "jev-axi hook stop";
 const SUPERVISE_POST_COMMAND = "jev-axi hook post-tool-use";
 
-/** Add or remove the Stop and PostToolUse supervision hooks for Claude Code. Idempotent; re-running switches --block. */
-export function configureSuperviseHooks(project: boolean, remove: boolean, block: boolean): { file: string; changed: boolean } {
-  const file = safetyHookPath("claude", project);
+/** Add or remove the Stop and PostToolUse supervision hooks. Idempotent; re-running switches --block. */
+export function configureSuperviseHooks(agent: "claude" | "codex", project: boolean, remove: boolean, block: boolean): { file: string; changed: boolean } {
+  const file = safetyHookPath(agent, project);
   const before = existsSync(file) ? readFileSync(file, "utf8") : "";
   const data = (before ? JSON.parse(before) : {}) as Record<string, any>;
   const hooks = (data["hooks"] ??= {});
-  // No matcher: the hook then runs for every tool.
+  // No matcher: both agents then run the hook for every tool.
   const wanted: [string, string, number][] = [
     ["Stop", block ? `${SUPERVISE_HOOK_COMMAND} --block` : SUPERVISE_HOOK_COMMAND, 20],
     ["PostToolUse", SUPERVISE_POST_COMMAND, 15],

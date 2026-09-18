@@ -112,6 +112,22 @@ describe("observations", () => {
     expect(diff).not.toContain("deploy.pem");
     expect(workDiff(dir)).toContain("dirty before the session");
   });
+  it("reads a Codex rollout", () => {
+    const file = join(dir, ".x-rollout.jsonl");
+    writeFileSync(
+      file,
+      [
+        { type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: "<recommended_plugins>..." }] } },
+        { type: "event_msg", payload: { type: "item_completed", item: { type: "UserMessage", content: [{ type: "text", text: "fix the flaky retry test" }] } } },
+        { type: "response_item", payload: { type: "custom_tool_call_output", output: [{ type: "input_text", text: "Output:\n" }, { type: "input_text", text: "2 passed" }] } },
+        { type: "response_item", payload: { type: "function_call_output", output: "exit 0" } },
+      ].map((e) => JSON.stringify(e)).join("\n"),
+    );
+    const t = readTranscript(file);
+    expect(t.job).toBe("fix the flaky retry test");
+    expect(t.output).toContain("2 passed");
+    expect(t.output).toContain("exit 0");
+  });
 });
 
 describe("progress", () => {
@@ -207,5 +223,11 @@ describe("setup supervise", () => {
     expect(cfg.hooks.Stop).toBeUndefined();
     expect(cfg.hooks.PreToolUse).toHaveLength(1);
     expect(existsSync(file)).toBe(true);
+  });
+  it("installs for Codex in .codex/hooks.json", async () => {
+    await main(["setup", "supervise", "--project", "--agent", "codex"], stdout);
+    const cfg = JSON.parse(readFileSync(join(dir, ".codex", "hooks.json"), "utf8"));
+    expect(cfg.hooks.Stop[0].hooks[0].command).toBe("jev-axi hook stop");
+    expect(cfg.hooks.PostToolUse[0].hooks[0].command).toBe("jev-axi hook post-tool-use");
   });
 });

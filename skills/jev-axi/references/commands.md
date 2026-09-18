@@ -259,11 +259,11 @@ install as agent hooks: jev-axi setup supervise   (see `jev-axi hook --help`)
 Warn when an agent stops early, gets stuck, or drifts.
 
 ```
-usage: jev-axi setup hooks [--project] | setup safety [--project] [--agent claude|codex] [--remove] | setup supervise [--project] [--block] [--remove] | setup agent [--project] [--replace-explore] [--remove] | setup git-hooks [--remove] | setup status [--project]
+usage: jev-axi setup hooks [--project] | setup safety [--project] [--agent claude|codex] [--remove] | setup supervise [--project] [--agent claude|codex] [--block] [--remove] | setup agent [--project] [--replace-explore] [--remove] | setup git-hooks [--remove] | setup status [--project]
 hooks    SessionStart hooks (Claude Code, Codex, OpenCode) so each session starts with jev-axi context.
 safety   PreToolUse hook that checks Bash commands and edits outside the project before they run, and blocks or asks
          about destructive, exfiltrating, or security-weakening calls. Routine calls are decided locally. See `jev-axi hook --help`.
-supervise  Claude Code Stop and PostToolUse hooks: when the agent ends a turn, checks the changes against the job and
+supervise  Stop and PostToolUse hooks for Claude Code or Codex: when the agent ends a turn, checks the changes against the job and
          warns if it looks unfinished or unverified; during work, notes when the agent looks stuck, off track, or
          blocked on a person. Warn-only unless --block. See `jev-axi hook --help`.
 agent    Claude Code subagent `jev-explore` that ranks files with jev-axi before reading them, for broad exploration.
@@ -272,7 +272,7 @@ git-hooks  pre-commit and commit-msg hooks in the current repository: blocks com
          locally), warns about risky or unfocused diffs and messages that don't match them. See `jev-axi hook --help`.
 flags:
   --project            install into the current repository instead of the user profile
-  --agent <name>       for safety: claude (default) or codex
+  --agent <name>       for safety and supervise: claude (default) or codex
   --block              for supervise: send the agent back to work (once per stop) instead of only warning the user
   --remove             for safety, supervise, agent, or git-hooks: uninstall
   --replace-explore    for agent: install as `Explore`, overriding Claude Code's built-in explorer in this scope
@@ -289,11 +289,11 @@ examples:
 Warn when an agent stops early, gets stuck, or drifts.
 
 ```
-usage: jev-axi setup hooks [--project] | setup safety [--project] [--agent claude|codex] [--remove] | setup supervise [--project] [--block] [--remove] | setup agent [--project] [--replace-explore] [--remove] | setup git-hooks [--remove] | setup status [--project]
+usage: jev-axi setup hooks [--project] | setup safety [--project] [--agent claude|codex] [--remove] | setup supervise [--project] [--agent claude|codex] [--block] [--remove] | setup agent [--project] [--replace-explore] [--remove] | setup git-hooks [--remove] | setup status [--project]
 hooks    SessionStart hooks (Claude Code, Codex, OpenCode) so each session starts with jev-axi context.
 safety   PreToolUse hook that checks Bash commands and edits outside the project before they run, and blocks or asks
          about destructive, exfiltrating, or security-weakening calls. Routine calls are decided locally. See `jev-axi hook --help`.
-supervise  Claude Code Stop and PostToolUse hooks: when the agent ends a turn, checks the changes against the job and
+supervise  Stop and PostToolUse hooks for Claude Code or Codex: when the agent ends a turn, checks the changes against the job and
          warns if it looks unfinished or unverified; during work, notes when the agent looks stuck, off track, or
          blocked on a person. Warn-only unless --block. See `jev-axi hook --help`.
 agent    Claude Code subagent `jev-explore` that ranks files with jev-axi before reading them, for broad exploration.
@@ -302,7 +302,7 @@ git-hooks  pre-commit and commit-msg hooks in the current repository: blocks com
          locally), warns about risky or unfocused diffs and messages that don't match them. See `jev-axi hook --help`.
 flags:
   --project            install into the current repository instead of the user profile
-  --agent <name>       for safety: claude (default) or codex
+  --agent <name>       for safety and supervise: claude (default) or codex
   --block              for supervise: send the agent back to work (once per stop) instead of only warning the user
   --remove             for safety, supervise, agent, or git-hooks: uninstall
   --replace-explore    for agent: install as `Explore`, overriding Claude Code's built-in explorer in this scope
@@ -334,11 +334,11 @@ examples:
 Warn when an agent stops early, gets stuck, or drifts.
 
 ```
-usage: jev-axi setup hooks [--project] | setup safety [--project] [--agent claude|codex] [--remove] | setup supervise [--project] [--block] [--remove] | setup agent [--project] [--replace-explore] [--remove] | setup git-hooks [--remove] | setup status [--project]
+usage: jev-axi setup hooks [--project] | setup safety [--project] [--agent claude|codex] [--remove] | setup supervise [--project] [--agent claude|codex] [--block] [--remove] | setup agent [--project] [--replace-explore] [--remove] | setup git-hooks [--remove] | setup status [--project]
 hooks    SessionStart hooks (Claude Code, Codex, OpenCode) so each session starts with jev-axi context.
 safety   PreToolUse hook that checks Bash commands and edits outside the project before they run, and blocks or asks
          about destructive, exfiltrating, or security-weakening calls. Routine calls are decided locally. See `jev-axi hook --help`.
-supervise  Claude Code Stop and PostToolUse hooks: when the agent ends a turn, checks the changes against the job and
+supervise  Stop and PostToolUse hooks for Claude Code or Codex: when the agent ends a turn, checks the changes against the job and
          warns if it looks unfinished or unverified; during work, notes when the agent looks stuck, off track, or
          blocked on a person. Warn-only unless --block. See `jev-axi hook --help`.
 agent    Claude Code subagent `jev-explore` that ranks files with jev-axi before reading them, for broad exploration.
@@ -347,7 +347,7 @@ git-hooks  pre-commit and commit-msg hooks in the current repository: blocks com
          locally), warns about risky or unfocused diffs and messages that don't match them. See `jev-axi hook --help`.
 flags:
   --project            install into the current repository instead of the user profile
-  --agent <name>       for safety: claude (default) or codex
+  --agent <name>       for safety and supervise: claude (default) or codex
   --block              for supervise: send the agent back to work (once per stop) instead of only warning the user
   --remove             for safety, supervise, agent, or git-hooks: uninstall
   --replace-explore    for agent: install as `Explore`, overriding Claude Code's built-in explorer in this scope
@@ -364,11 +364,11 @@ examples:
 Warn when an agent stops early, gets stuck, or drifts.
 
 ```
-usage: jev-axi setup hooks [--project] | setup safety [--project] [--agent claude|codex] [--remove] | setup supervise [--project] [--block] [--remove] | setup agent [--project] [--replace-explore] [--remove] | setup git-hooks [--remove] | setup status [--project]
+usage: jev-axi setup hooks [--project] | setup safety [--project] [--agent claude|codex] [--remove] | setup supervise [--project] [--agent claude|codex] [--block] [--remove] | setup agent [--project] [--replace-explore] [--remove] | setup git-hooks [--remove] | setup status [--project]
 hooks    SessionStart hooks (Claude Code, Codex, OpenCode) so each session starts with jev-axi context.
 safety   PreToolUse hook that checks Bash commands and edits outside the project before they run, and blocks or asks
          about destructive, exfiltrating, or security-weakening calls. Routine calls are decided locally. See `jev-axi hook --help`.
-supervise  Claude Code Stop and PostToolUse hooks: when the agent ends a turn, checks the changes against the job and
+supervise  Stop and PostToolUse hooks for Claude Code or Codex: when the agent ends a turn, checks the changes against the job and
          warns if it looks unfinished or unverified; during work, notes when the agent looks stuck, off track, or
          blocked on a person. Warn-only unless --block. See `jev-axi hook --help`.
 agent    Claude Code subagent `jev-explore` that ranks files with jev-axi before reading them, for broad exploration.
@@ -377,7 +377,7 @@ git-hooks  pre-commit and commit-msg hooks in the current repository: blocks com
          locally), warns about risky or unfocused diffs and messages that don't match them. See `jev-axi hook --help`.
 flags:
   --project            install into the current repository instead of the user profile
-  --agent <name>       for safety: claude (default) or codex
+  --agent <name>       for safety and supervise: claude (default) or codex
   --block              for supervise: send the agent back to work (once per stop) instead of only warning the user
   --remove             for safety, supervise, agent, or git-hooks: uninstall
   --replace-explore    for agent: install as `Explore`, overriding Claude Code's built-in explorer in this scope
@@ -497,7 +497,7 @@ flags:
   --on-error <mode>    when Jev is unreachable or slow: allow (default, normal flow), ask, or deny
   --explain            print the decision, scores, and reason as TOON instead of hook JSON
 install: jev-axi setup safety [--project] [--agent claude|codex]
-supervision hooks for Claude Code (install: jev-axi setup supervise [--project] [--block]):
+supervision hooks for Claude Code and Codex (install: jev-axi setup supervise [--project] [--agent claude|codex] [--block]):
   stop [--block]       when the agent ends its turn with changes in the repository, scores whether the job from the
                        transcript is implemented, tested, and verified. Warns the user on a clear signal only; with --block it
                        sends the agent back to work once per stop, with the reason. Turns with no changes are skipped.

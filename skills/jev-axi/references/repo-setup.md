@@ -73,11 +73,12 @@ jev-axi setup safety --remove --project     # uninstall
 
 ## Agent supervision hooks
 
-**For:** Claude Code working on multi-step jobs, where the cost is a turn that ends
+**For:** agents (Claude Code, Codex) working on multi-step jobs, where the cost is a turn that ends
 early or an agent that burns calls going nowhere.
 
 ```sh
 jev-axi setup supervise --project                 # Claude Code: .claude/settings.json, warn-only
+jev-axi setup supervise --project --agent codex   # Codex: .codex/hooks.json
 jev-axi setup supervise --project --block         # re-run to switch mode
 jev-axi setup supervise --remove --project
 ```
@@ -97,7 +98,8 @@ jev-axi setup supervise --remove --project
   diff (untracked files included), the tail of recent tool output, and the last 30 tool calls,
   with credentials in known formats redacted. Credential files (`.env`, `*.pem`, `.npmrc`, ...) and
   changes that predate the session are left out. This is more than the safety hook sends: confirm it.
-- The job is read from the session transcript. If it can't be read, the hooks do nothing.
+- The job is read from the agent's transcript, whose format neither agent guarantees. If it
+  can't be read, the hooks do nothing.
 - **Check it:** `jev-axi setup status --project`; run any hook by hand with `--explain --input '<json>'`.
 - Restart the agent session after installing.
 
@@ -237,6 +239,7 @@ git diff main..HEAD | jev-axi recipe run release-risk
 jev-axi setup safety --remove --project
 jev-axi setup safety --remove --project --agent codex
 jev-axi setup supervise --remove --project
+jev-axi setup supervise --remove --project --agent codex
 jev-axi setup git-hooks --remove
 jev-axi setup agent --remove --project
 ```

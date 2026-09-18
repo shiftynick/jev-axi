@@ -203,11 +203,11 @@ function statsView(): Record<string, unknown> {
   };
 }
 
-export const SETUP_HELP = `usage: jev-axi setup hooks [--project] | setup safety [--project] [--agent claude|codex] [--remove] | setup supervise [--project] [--block] [--remove] | setup agent [--project] [--replace-explore] [--remove] | setup git-hooks [--remove] | setup status [--project]
+export const SETUP_HELP = `usage: jev-axi setup hooks [--project] | setup safety [--project] [--agent claude|codex] [--remove] | setup supervise [--project] [--agent claude|codex] [--block] [--remove] | setup agent [--project] [--replace-explore] [--remove] | setup git-hooks [--remove] | setup status [--project]
 hooks    SessionStart hooks (Claude Code, Codex, OpenCode) so each session starts with jev-axi context.
 safety   PreToolUse hook that checks Bash commands and edits outside the project before they run, and blocks or asks
          about destructive, exfiltrating, or security-weakening calls. Routine calls are decided locally. See \`jev-axi hook --help\`.
-supervise  Claude Code Stop and PostToolUse hooks: when the agent ends a turn, checks the changes against the job and
+supervise  Stop and PostToolUse hooks for Claude Code or Codex: when the agent ends a turn, checks the changes against the job and
          warns if it looks unfinished or unverified; during work, notes when the agent looks stuck, off track, or
          blocked on a person. Warn-only unless --block. See \`jev-axi hook --help\`.
 agent    Claude Code subagent \`jev-explore\` that ranks files with jev-axi before reading them, for broad exploration.
@@ -216,7 +216,7 @@ git-hooks  pre-commit and commit-msg hooks in the current repository: blocks com
          locally), warns about risky or unfocused diffs and messages that don't match them. See \`jev-axi hook --help\`.
 flags:
   --project            install into the current repository instead of the user profile
-  --agent <name>       for safety: claude (default) or codex
+  --agent <name>       for safety and supervise: claude (default) or codex
   --block              for supervise: send the agent back to work (once per stop) instead of only warning the user
   --remove             for safety, supervise, agent, or git-hooks: uninstall
   --replace-explore    for agent: install as \`Explore\`, overriding Claude Code's built-in explorer in this scope
@@ -251,16 +251,18 @@ export async function setupCommand(args: string[]): Promise<AxiRenderable> {
     return { safety: { status, agent, scope, file }, ...(help.length ? { help } : {}) };
   }
   if (action === "supervise") {
-    const { file, changed } = configureSuperviseHooks(p.bools["--project"], p.bools["--remove"], p.bools["--block"]);
+    const agent = (p.values["--agent"] ?? "claude") as "claude" | "codex";
+    if (agent !== "claude" && agent !== "codex") throw validation("--agent must be claude or codex");
+    const { file, changed } = configureSuperviseHooks(agent, p.bools["--project"], p.bools["--remove"], p.bools["--block"]);
     const status = p.bools["--remove"] ? (changed ? "removed" : "not installed (no-op)") : changed ? "installed" : "already installed (no-op)";
     const help = p.bools["--remove"]
       ? []
       : [
-          "Restart Claude Code to activate it",
+          "Restart the agent session to activate it",
           "The job, a bounded diff, and recent tool calls are sent to TypeSafe's API with secrets redacted",
           "The scores are not calibrated for every project: check `jev-axi stats` after a few sessions before turning on --block",
         ];
-    return { supervise: { status, mode: p.bools["--block"] ? "block" : "warn", scope, file }, ...(help.length ? { help } : {}) };
+    return { supervise: { status, agent, mode: p.bools["--block"] ? "block" : "warn", scope, file }, ...(help.length ? { help } : {}) };
   }
   if (action === "agent") {
     const { file, status } = configureAgent(p.bools["--project"], p.bools["--remove"], p.bools["--replace-explore"]);
@@ -283,9 +285,9 @@ export async function setupCommand(args: string[]): Promise<AxiRenderable> {
         return "missing";
       }
     };
-    const superviseStatus = () => {
+    const superviseStatus = (agent: "claude" | "codex") => {
       try {
-        const f = configureSafetyHookPath("claude", p.bools["--project"]);
+        const f = configureSafetyHookPath(agent, p.bools["--project"]);
         return existsSync(f) && readFileSync(f, "utf8").includes(SUPERVISE_HOOK_COMMAND) ? "installed" : "missing";
       } catch {
         return "missing";
@@ -294,7 +296,7 @@ export async function setupCommand(args: string[]): Promise<AxiRenderable> {
     return {
       hooks: { scope, claude: s.claude.installed ? "installed" : "missing", codex: s.codex.installed ? "installed" : "missing", opencode: s.opencode.installed ? "installed" : "missing" },
       safety: { scope, claude: safetyFile("claude"), codex: safetyFile("codex") },
-      supervise: { scope, claude: superviseStatus() },
+      supervise: { scope, claude: superviseStatus("claude"), codex: superviseStatus("codex") },
     };
   }
   throw new AxiError("Unknown setup action", "VALIDATION_ERROR", ["Run `jev-axi setup hooks`, `jev-axi setup safety`, `jev-axi setup supervise`, `jev-axi setup agent`, `jev-axi setup git-hooks`, or `jev-axi setup status`"]);

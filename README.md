@@ -200,6 +200,7 @@ agent. jev-axi does not run the agent; it plugs the same questions into the agen
 
 ```bash
 jev-axi setup supervise --project     # Claude Code Stop + PostToolUse hooks, warn-only
+jev-axi setup supervise --agent codex # Codex, user level (~/.codex/hooks.json)
 jev-axi setup supervise --block       # send the agent back to work instead of warning
 jev-axi setup supervise --remove
 ```
@@ -229,7 +230,8 @@ These scores are not calibrated for your project. A wrong "not done" sends an ag
 finished work, so run warn-only first and check `jev-axi stats` (what the hooks judged, and the
 last times they spoke) before turning on `--block`. With
 `--block`, the agent is sent back at most once per stop. `bench/cases/progress.yaml` holds the
-labeled cases. Claude Code only for now.
+labeled cases. The job is read from the agent's transcript, a format neither Claude Code nor
+Codex guarantees; when it can't be read the hooks do nothing.
 
 ## Guarded commands
 

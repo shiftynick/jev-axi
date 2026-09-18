@@ -140,10 +140,19 @@ function blockText(content: unknown, kind: "text" | "tool_result"): string {
     .join("\n");
 }
 
-/** The job and recent tool output from a Claude Code transcript (JSONL). The job is the first prompt plus the latest one. */
+/**
+ * The job and recent tool output from a session transcript (JSONL). The job is the first prompt plus
+ * the latest one. Reads Claude Code transcripts and Codex rollouts; neither format is a stable
+ * interface, so unknown lines are skipped and a transcript with no prompts yields an empty job.
+ */
 export function readTranscript(file: string): { job: string; output: string } {
   const prompts: string[] = [];
   const outputs: string[] = [];
+  // Harness-injected turns (slash-command echoes, reminders, plugin lists) are not the user's request.
+  const prompt = (text: string) => {
+    const t = text.trim();
+    if (t && !t.startsWith("<") && prompts[prompts.length - 1] !== t) prompts.push(t);
+  };
   for (const line of readFileSync(file, "utf8").split("\n")) {
     if (!line.trim()) continue;
     let e: any;
@@ -152,12 +161,21 @@ export function readTranscript(file: string): { job: string; output: string } {
     } catch {
       continue;
     }
-    if (e?.type !== "user" || e.isMeta || e.isSidechain) continue;
-    const text = blockText(e.message?.content, "text").trim();
-    // Harness-injected turns (slash-command echoes, reminders) are not the user's request.
-    if (text && !text.startsWith("<")) prompts.push(text);
-    const result = blockText(e.message?.content, "tool_result").trim();
-    if (result) outputs.push(result);
+    if (e?.type === "user" && !e.isMeta && !e.isSidechain) {
+      // Claude Code
+      prompt(blockText(e.message?.content, "text"));
+      const result = blockText(e.message?.content, "tool_result").trim();
+      if (result) outputs.push(result);
+    } else if (e?.type === "event_msg" && e.payload?.type === "item_completed" && e.payload.item?.type === "UserMessage") {
+      // Codex
+      prompt(blockText(e.payload.item.content, "text"));
+    } else if (e?.type === "event_msg" && e.payload?.type === "user_message" && typeof e.payload.message === "string") {
+      prompt(e.payload.message);
+    } else if (e?.type === "response_item" && /^(custom_tool|function)_call_output$/.test(String(e.payload?.type))) {
+      const o = e.payload.output;
+      const result = (typeof o === "string" ? o : Array.isArray(o) ? o.map((b: any) => String(b?.text ?? "")).join("") : "").trim();
+      if (result) outputs.push(result);
+    }
   }
   const first = prompts[0] ?? "";
   const last = prompts[prompts.length - 1] ?? "";
