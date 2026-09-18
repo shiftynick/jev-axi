@@ -82,11 +82,9 @@ export async function rankCommand(args: string[]): Promise<AxiRenderable> {
     const weight = chunks.length > 1 ? exists : 1;
     for (const item of chunk) scored.push({ item, p: (where.probabilities[item.id] ?? 0) * weight });
   }
-  const norm = chunks.length > 1 ? scored.reduce((s, x) => s + x.p, 0) || 1 : 1;
-  const ranked = scored
-    .map((x) => ({ ...x, p: x.p / norm }))
-    .sort((a, b) => b.p - a.p)
-    .filter((x) => x.p >= min);
+  // p stays where × exists, never renormalized across chunks: an item's score
+  // and the meaning of --min must not depend on how many items were given.
+  const ranked = scored.filter((x) => x.p >= min).sort((a, b) => b.p - a.p);
   const shown = ranked.slice(0, top);
   const rows = shown.map((x, i) => ({ rank: i + 1, p: round(x.p, 3), item: x.item.label, preview: oneLine(x.item.text, 60) }));
   const out: Record<string, unknown> = {

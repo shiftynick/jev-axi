@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -159,6 +159,37 @@ describe("cli", () => {
     expect(out).toContain("count: 1 shown");
     expect(out).toContain("THE RETRY DELAY IS DECIDED HERE");
     expect(out).not.toContain("ordinary source line 0");
+    // The shown p is the same where × exists score --min was applied to, not a share diluted by 102 windows.
+    expect(out).toMatch(/\n\s+0\.63,256,/);
+  });
+
+  it("rank scores an item the same however many chunks surround it", async () => {
+    const api = async (_url: unknown, init?: any) => {
+      const body = JSON.parse(init.body);
+      const target = Object.entries<any>(body.state).find(([, v]) => v.text.includes("THE RETRY DELAY"))?.[0];
+      const answers: Record<string, unknown> = {};
+      for (const [id, q] of Object.entries<any>(body.questions)) {
+        if (q.type === "noul") answers[id] = { type: "noul", noul: target ? 0.9 : 0.1 };
+        else {
+          const keys = Object.keys(q.criteria);
+          const best = target ?? keys[0]!;
+          answers[id] = {
+            type: "choice",
+            choice: best,
+            probabilities: Object.fromEntries(keys.map((k) => [k, k === best ? 0.7 : 0.3 / (keys.length - 1)])),
+            confidence: 0.9,
+          };
+        }
+      }
+      return new Response(JSON.stringify({ model: "jev-test", answers, usage: { input_tokens: 1, output_tokens: 1 } }), { status: 200 });
+    };
+    configureFetch(api as any);
+    const many = join(dir, "many");
+    mkdirSync(many);
+    for (let i = 0; i < 2600; i++) writeFileSync(join(many, `f${i}.txt`), i === 1300 ? "THE RETRY DELAY IS DECIDED HERE" : `ordinary file ${i}`);
+    await main(["rank", "where is the retry delay decided?", many, "--min", "0.5", "--no-cache"], stdout);
+    expect(out).toContain("count: 1 shown of 2600 items");
+    expect(out).toMatch(/1,0\.63,.*f1300\.txt/);
   });
 
   it("fails loud on unknown flags with exit code 2", async () => {

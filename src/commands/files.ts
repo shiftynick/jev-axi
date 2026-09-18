@@ -118,8 +118,9 @@ export async function filesCommand(args: string[]): Promise<Renderable> {
     const weight = chunks.length > 1 ? exists : 1;
     for (const item of chunk) scored.push({ item, p: (where.probabilities[item.id] ?? 0) * weight });
   });
-  const norm = chunks.length > 1 ? scored.reduce((s, x) => s + x.p, 0) || 1 : 1;
-  const ranked = scored.map((x) => ({ ...x, p: x.p / norm })).sort((a, b) => b.p - a.p);
+  // p stays where × exists, never renormalized across chunks, so the cutoff
+  // below means the same thing in a small repo and a large one.
+  const ranked = [...scored].sort((a, b) => b.p - a.p);
   const shown = ranked.slice(0, top).filter((x) => x.p >= 0.005);
   const out: Record<string, unknown> = {
     task,
