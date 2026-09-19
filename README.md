@@ -10,6 +10,8 @@ text — it answers typed questions with calibrated probabilities, in about 400m
 a few thousandths of a cent. That makes it cheap enough to put in front of *every*
 command your agent runs.
 
+![jev-axi blocking a download-and-run command, allowing a routine one locally, and catching instructions hidden in a fetched page](https://raw.githubusercontent.com/shiftynick/jev-axi/main/scripts/demo/safety.gif)
+
 Stop an agent before it does damage:
 
 ```console
@@ -67,6 +69,9 @@ help[1]:
 
 `guard` exits 3, so `curl ... | jev-axi guard && process` gates on it. Note the last
 line: 375ms and four thousandths of a cent to screen that page.
+
+Every transcript above is copied from a real run; `scripts/demo/` regenerates the
+GIF from the same commands.
 
 Beyond safety, agents use it wherever a fast calibrated call beats reading or reasoning:
 
