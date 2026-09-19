@@ -53,14 +53,22 @@ Broad tasks only, 3 repeats per task and condition, 2026-09-17:
 | jev-axi-explore | 5/6 | $0.694 | 133 s | 12 | 2/6 |
 | jev-axi-forced | 5/6 | $0.826 | 210 s | 18 | 6/6 |
 
-- Jev spend is negligible (at most $0.016 per run); the cost is all Claude.
+- Jev spend is negligible (20 cents across all 56 runs recorded here, at most $0.039
+  in any one run, against $36.85 of Claude); the cost is all Claude.
 - The differences are within run-to-run noise. On this repo, Claude Code's grep-based
   exploration is already efficient, and file ranking does not make it cheaper. Forcing
   jev-axi adds turns.
 - Claude Code picks its built-in `Explore` over a custom `jev-explore` subagent, so only the
   override reaches exploration at all. Even then it usually sees an obvious identifier and
-  greps, as instructed.
-- Earlier runs with the skill alone or a SessionStart hook never used jev-axi unprompted.
+  greps, as instructed: the override ran the binary in 7 of 7 runs, but 4 of those made zero
+  API calls.
+- Across all 22 runs where the agent had a choice (`jev-axi`, `jev-axi-hook`, `jev-axi-agent`,
+  `jev-axi-explore`), the skill was loaded 0 times. Neither the skill alone nor a SessionStart
+  hook announcing it led to jev-axi being used unprompted.
+- Mean and median disagree in sign at this sample size. In the 2026-09-17T083821 session,
+  `jev-axi-forced` cost 2% more than baseline by mean and 5% less by median; in
+  2026-09-17T091348 it cost 15% more by mean and 25% more by median. Six runs per condition is
+  not enough to call a direction, let alone a magnitude.
 
 jev-axi's case rests on judgments an agent can't make cheaply by reading (log triage,
 untrusted-text screening, safety checks) rather than on reducing exploration tokens.
