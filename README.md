@@ -117,6 +117,7 @@ jev-axi                       # live status: key, model, usage, commands
 | Screen untrusted text | `curl ... \| jev-axi guard` (exit 3 on block) |
 | Is the job done? | `<test cmd> 2>&1 \| jev-axi progress --job "<task>"` (exit 3 unless finish) |
 | Check commit messages against diffs | `jev-axi commit [--range a..b]` |
+| Judge a range before pushing it | `jev-axi hook pre-push --range main..HEAD` |
 | Saved question sets (YAML) | `jev-axi recipe list \| run <name> \| new <name>` |
 | Show or clear the response cache | `jev-axi cache [clear [--stale]]` |
 | Tokens and estimated spend, recent | `jev-axi usage [--by day\|command\|project]` |
@@ -400,11 +401,24 @@ jev-axi setup git-hooks --remove
   debug leftovers, and behavior changes without tests.
 - **commit-msg:** warns when the message doesn't describe the staged diff, when the subject is
   vague, and when it breaks Conventional Commits in a repository whose history uses them.
-- Warnings never block. Both hooks skip quietly when jev-axi isn't installed, there is no API
-  key, or the API is unreachable, and add about a second per commit. Bypass once with
-  `git commit --no-verify`.
-- Stricter: edit the hook to run `jev-axi hook pre-commit --block-on flags` or
-  `jev-axi hook commit-msg "$1" --strict`.
+- **pre-push:** judges everything the push would send as one range rather than per commit, which
+  is where a different set of problems shows up: a schema or migration change with no rollback or
+  deploy note anywhere in the commits, a range that touches auth, permissions, crypto, or
+  credential handling, files a build normally generates that look hand-edited, and work-in-progress
+  leftovers that survived pre-commit because they were added in an earlier commit. It reads the ref
+  updates git passes on stdin, so it judges exactly `remote..local`; for a branch the remote has
+  never seen, it judges the commits no remote has yet.
+- Warnings never block. All three hooks skip quietly when jev-axi isn't installed, there is no API
+  key, or the API is unreachable, and add about a second per commit or push. Bypass once with
+  `git commit --no-verify` or `git push --no-verify`.
+- **Each range is reported once.** Pushing a branch ten times while you work would otherwise
+  repeat the same warning until you stop reading it, so pre-push records the range it warned about
+  and stays quiet until new commits change it.
+- Stricter: edit the hook to run `jev-axi hook pre-commit --block-on flags`,
+  `jev-axi hook commit-msg "$1" --strict`, or `jev-axi hook pre-push --block-on flags`.
+- Judge a range or a patch by hand with `jev-axi hook pre-push --range main..HEAD` or
+  `--range`/`--file <patch>`; `--json` reports all four probabilities, not only the raised ones.
+  Labeled cases are in `bench/cases/push.yaml` (`pnpm eval --only push`).
 - Repositories using husky, lefthook, or another `core.hooksPath` manager get the lines to add
   there instead.
 

@@ -28,7 +28,7 @@ want before installing anything (see [Ask before installing](#ask-before-install
 | Stop coding agents from running destructive, exfiltrating, or download-and-run commands | Agent safety hook | `jev-axi setup safety --project` |
 | Notice when a coding agent stops before the job is done, loops on the same failure, drifts, or needs a person | Agent supervision hooks | `jev-axi setup supervise --project` |
 | Check risky commands in scripts, cron jobs, runbooks, or CI steps before they run | `guard-exec` | Prefix the command: `jev-axi guard-exec -- "<command>"` |
-| Stop commits that add credentials; get warnings about debug leftovers and missing tests | Git hooks | `jev-axi setup git-hooks` |
+| Stop commits that add credentials; get warnings about debug leftovers and missing tests, and about a whole range before it is pushed | Git hooks | `jev-axi setup git-hooks` |
 | Review every pull request and explain failed CI runs as PR comments | GitHub Action | Add the workflow files below |
 | Write a team's own judgment ("is this ticket urgent", "is this migration risky") once and reuse it | Shared recipes | `jev-axi recipe new <name> --project` |
 | Make agents in this repo use jev-axi well | Skill, session hook, explorer subagent | See [Helping agents use jev-axi](#helping-agents-use-jev-axi) |
@@ -155,16 +155,27 @@ jev-axi setup git-hooks --remove
   about risky files, debug leftovers, and behavior changes without tests.
 - **commit-msg** warns when the message doesn't describe the staged diff, is vague, or breaks
   Conventional Commits in a repository whose history uses them.
-- Warnings never block. Both hooks add about a second per commit and skip quietly without the
-  CLI, a key, or network. `git commit --no-verify` bypasses them once.
-- Stricter: edit `.git/hooks/pre-commit` to run `jev-axi hook pre-commit --block-on flags`, or
-  `.git/hooks/commit-msg` to run `jev-axi hook commit-msg "$1" --strict`.
+- **pre-push** judges the whole range being pushed, not each commit: a schema or migration change
+  with no rollback or deploy note in the commits, a range touching auth, permissions, crypto, or
+  credential handling, hand-edited generated or vendored files, and work-in-progress leftovers
+  that got past pre-commit in an earlier commit. It reads git's ref updates on stdin so the range
+  is exactly what the remote is missing, and it reports each range once, so pushing a branch
+  repeatedly while you work stays quiet until new commits change it.
+- Warnings never block. All three hooks add about a second per commit or push and skip quietly
+  without the CLI, a key, or network. `git commit --no-verify` and `git push --no-verify` bypass
+  them once.
+- Stricter: edit `.git/hooks/pre-commit` to run `jev-axi hook pre-commit --block-on flags`,
+  `.git/hooks/commit-msg` to run `jev-axi hook commit-msg "$1" --strict`, or `.git/hooks/pre-push`
+  to run `jev-axi hook pre-push --block-on flags`.
 - **husky, lefthook, or another `core.hooksPath` manager:** the installer doesn't write into it
   and prints the lines to add to that tool's hooks instead.
 - `.git/hooks` isn't versioned, so each clone installs its own. For a team, add
   `jev-axi setup git-hooks` to the repository's setup script or contributing guide, or use the
   hook manager lines.
-- **What leaves the machine:** the staged diff with credentials redacted, and the commit message.
+- **What leaves the machine:** the staged diff with credentials redacted, the commit message, and
+  for pre-push the pushed range's diff (bounded to 20,000 characters, credentials redacted) with
+  its commit subjects and file list. Ranges over 60 files or 50 commits are skipped rather than
+  truncated.
 
 ## GitHub Action: pull request review and CI triage
 

@@ -7,7 +7,7 @@ import { ensureDir, paths } from "../config.js";
 import { validation } from "../errors.js";
 import { SAFETY_QUESTIONS } from "../recipes/questions.js";
 import { buildSafetyState, decide, hookOutput, localVerdict, reasonText, redactSecrets, type Decision, type ToolCall } from "../safety.js";
-import { commitMsgHook, GIT_HOOKS_HELP, preCommitHook } from "./githooks.js";
+import { GIT_HOOKS_HELP, commitMsgHook, preCommitHook, prePushHook } from "./githooks.js";
 import { isStdinTTY, readStdinSync } from "../stdin.js";
 import { assess, readSession, readTranscript, recordEvent, workDiff, type Assessment } from "../supervise.js";
 import { PROGRESS_THRESHOLDS } from "../recipes/questions.js";
@@ -15,6 +15,7 @@ import type { Renderable } from "./common.js";
 
 export const HOOK_HELP = `usage: jev-axi hook pre-tool-use [--agent claude|codex] [--input <json|path>] [--on-error allow|ask|deny] [--explain]
        jev-axi hook pre-commit [--block-on secrets|flags|none]   |   jev-axi hook commit-msg <file> [--strict]
+       jev-axi hook pre-push [--block-on flags|none] [--range <a..b>]
 Safety check for a tool call an agent is about to make, run as a PreToolUse hook. Reads the hook JSON on stdin.
 Routine calls (read-only commands, the project's tests and builds, edits inside the project) are decided locally with
 no API call. Other calls are sent to Jev with secrets redacted and scored for destructive actions, exfiltration,
@@ -76,9 +77,10 @@ function logDecision(entry: Record<string, unknown>, name = "safety"): void {
 export async function hookCommand(args: string[]): Promise<Renderable> {
   if (args[0] === "pre-commit") return preCommitHook(args.slice(1));
   if (args[0] === "commit-msg") return commitMsgHook(args.slice(1));
+  if (args[0] === "pre-push") return prePushHook(args.slice(1));
   if (args[0] === "stop" || args[0] === "post-tool-use") return superviseHook(args[0], args.slice(1));
   const p = parseArgs(args, { "--agent": "value", "--input": "value", "--on-error": "value", "--explain": "bool" }, "hook");
-  if (p.positional[0] !== "pre-tool-use") throw validation("unknown hook", ["jev-axi hook pre-tool-use", "jev-axi hook stop", "jev-axi hook post-tool-use", "jev-axi hook pre-commit", "jev-axi hook commit-msg <file>"]);
+  if (p.positional[0] !== "pre-tool-use") throw validation("unknown hook", ["jev-axi hook pre-tool-use", "jev-axi hook stop", "jev-axi hook post-tool-use", "jev-axi hook pre-commit", "jev-axi hook commit-msg <file>", "jev-axi hook pre-push"]);
   const agent = (p.values["--agent"] ?? "claude") as "claude" | "codex";
   if (agent !== "claude" && agent !== "codex") throw validation("--agent must be claude or codex");
   const onError = (p.values["--on-error"] ?? "allow") as Decision;

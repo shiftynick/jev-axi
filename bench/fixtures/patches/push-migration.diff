@@ -1,0 +1,25 @@
+diff --git a/migrations/0007_split_orders.sql b/migrations/0007_split_orders.sql
+new file mode 100644
+index 0000000..3a1f9c2
+--- /dev/null
++++ b/migrations/0007_split_orders.sql
+@@ -0,0 +1,8 @@
++ALTER TABLE orders DROP COLUMN legacy_customer_ref;
++
++ALTER TABLE orders
++  ADD COLUMN customer_id BIGINT NOT NULL,
++  ADD CONSTRAINT fk_orders_customer FOREIGN KEY (customer_id) REFERENCES customers (id);
++
++UPDATE orders SET customer_id = 0 WHERE customer_id IS NULL;
++CREATE UNIQUE INDEX idx_orders_customer ON orders (customer_id, placed_at);
+diff --git a/src/orders/repository.ts b/src/orders/repository.ts
+index 8c1d4a2..b77e310 100644
+--- a/src/orders/repository.ts
++++ b/src/orders/repository.ts
+@@ -12,7 +12,7 @@ export class OrderRepository {
+   async findForCustomer(customerId: number): Promise<Order[]> {
+-    const rows = await this.db.query("select * from orders where legacy_customer_ref = $1", [String(customerId)]);
++    const rows = await this.db.query("select * from orders where customer_id = $1", [customerId]);
+     return rows.map(toOrder);
+   }
+ }

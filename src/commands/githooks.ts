@@ -1,13 +1,14 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
+import { isStdinTTY, readStdinSync } from "../stdin.js";
 import { parseArgs } from "../args.js";
 import { evaluate, type NoulAnswer, type ScoreAnswer } from "../client.js";
-import { resolveThresholds } from "../config.js";
+import { ensureDir, paths, resolveThresholds } from "../config.js";
 import { AxiError, validation } from "../errors.js";
 import { loadDiff, parseDiff, runGit, scanAddedLines, type FileDiff } from "../git.js";
-import { COMMIT_QUESTIONS, COMMIT_THRESHOLDS } from "../recipes/questions.js";
+import { COMMIT_QUESTIONS, COMMIT_THRESHOLDS, PUSH_QUESTIONS, PUSH_THRESHOLDS } from "../recipes/questions.js";
 import { redactSecrets } from "../safety.js";
-import { renderWithHelp, type Renderable } from "./common.js";
+import { finish, renderWithHelp, type Renderable } from "./common.js";
 import { reviewFiles } from "./diff.js";
 
 export const GIT_HOOKS_HELP = `git hooks (install: jev-axi setup git-hooks):
@@ -18,6 +19,11 @@ export const GIT_HOOKS_HELP = `git hooks (install: jev-axi setup git-hooks):
   commit-msg <file>    checks the message describes the staged diff, and follows Conventional Commits when the
                        repo's history does (warns)
     --strict           block when the message does not describe the diff
+  pre-push             judges everything the push would send, as one range: schema change with no rollback note,
+                       auth/crypto/permission changes, hand-edited generated files, work-in-progress leftovers (warns)
+    --block-on <what>  none (default): never block; flags: block when a concern is strong
+    --range <a..b>     judge this range instead of reading git's ref updates on stdin
+    --file <patch>     judge a patch file instead (no commit subjects are available)
   Both skip quietly when there is no API key or the API is unreachable. Bypass once with git commit --no-verify.`;
 
 /** Diffs with more files than this are not sent for review (bulk renames, vendored code, merges). */
@@ -78,6 +84,215 @@ export async function preCommitHook(args: string[]): Promise<Renderable> {
     files: review.flagged.map((v) => ({ file: v.file, risk: v.risk, flags: v.flags })),
     help,
   });
+}
+
+const ZERO_SHA = /^0{40,}$/;
+
+export interface PushUpdate {
+  localRef: string;
+  localSha: string;
+  remoteRef: string;
+  remoteSha: string;
+}
+
+/** Parse the `<local ref> <local sha> <remote ref> <remote sha>` lines git sends a pre-push hook. */
+export function parsePushUpdates(stdin: string): PushUpdate[] {
+  const updates: PushUpdate[] = [];
+  for (const line of stdin.split(/\r?\n/)) {
+    const parts = line.trim().split(/\s+/);
+    if (parts.length < 4) continue;
+    const [localRef, localSha, remoteRef, remoteSha] = parts as [string, string, string, string];
+    // A deletion has an all-zero local sha: there is nothing to judge.
+    if (ZERO_SHA.test(localSha)) continue;
+    updates.push({ localRef, localSha, remoteRef, remoteSha });
+  }
+  return updates;
+}
+
+/**
+ * The commits a push would actually send. When the remote already has the branch this is
+ * `remote..local`; for a new branch there is no remote side, so it is everything on the branch
+ * that no remote already has.
+ */
+export function pushRange(u: PushUpdate): { commits: string[]; diffArgs: string[] } | undefined {
+  try {
+    const revs = ZERO_SHA.test(u.remoteSha)
+      ? ["rev-list", "--max-count", String(PUSH_THRESHOLDS.maxCommits + 1), u.localSha, "--not", "--remotes"]
+      : ["rev-list", "--max-count", String(PUSH_THRESHOLDS.maxCommits + 1), `${u.remoteSha}..${u.localSha}`];
+    const commits = runGit(revs).trim().split("\n").filter(Boolean);
+    if (commits.length === 0) return undefined;
+    if (ZERO_SHA.test(u.remoteSha)) {
+      const oldest = commits[commits.length - 1]!;
+      // `oldest^` does not exist for a root commit; diff against the empty tree instead.
+      let base: string;
+      try {
+        base = runGit(["rev-parse", "--verify", `${oldest}^`]).trim();
+      } catch {
+        base = runGit(["hash-object", "-t", "tree", "/dev/null"]).trim();
+      }
+      return { commits, diffArgs: [base, u.localSha] };
+    }
+    return { commits, diffArgs: [u.remoteSha, u.localSha] };
+  } catch {
+    return undefined;
+  }
+}
+
+/** Ranges already warned about, so re-pushing the same commits stays quiet. */
+function seenFile(): string {
+  return join(paths.statsDir(), "push-seen.json");
+}
+
+/** Exported for tests. */
+export function pushAlreadyWarned(key: string): boolean {
+  try {
+    const seen = JSON.parse(readFileSync(seenFile(), "utf8")) as Record<string, number>;
+    return typeof seen[key] === "number";
+  } catch {
+    return false;
+  }
+}
+
+/** Exported for tests. */
+export function pushRecordWarned(key: string): void {
+  let seen: Record<string, number> = {};
+  try {
+    seen = JSON.parse(readFileSync(seenFile(), "utf8")) as Record<string, number>;
+  } catch {
+    // first write
+  }
+  seen[key] = Date.now();
+  // Keep the file small: drop anything older than 30 days.
+  const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  for (const [k, at] of Object.entries(seen)) if (at < cutoff) delete seen[k];
+  try {
+    ensureDir(paths.statsDir());
+    writeFileSync(seenFile(), JSON.stringify(seen));
+  } catch {
+    // a hook must not fail because state could not be written
+  }
+}
+
+type PushConcernId = "migration_without_note" | "sensitive_area" | "generated_by_hand" | "unreviewed_leftovers";
+
+const PUSH_CONCERNS: Array<{ id: PushConcernId; label: string; help: string }> = [
+  { id: "migration_without_note", label: "migration-without-note", help: "migration-without-note: a schema or data-format change with no rollback or deploy note in the commits" },
+  { id: "sensitive_area", label: "sensitive-area", help: "sensitive-area: this range changes auth, permissions, crypto, or credential handling; worth a second reader" },
+  { id: "generated_by_hand", label: "generated-by-hand", help: "generated-by-hand: files a build normally produces look hand-edited; regenerate them instead" },
+  { id: "unreviewed_leftovers", label: "leftovers", help: "leftovers: debug output, commented-out code, TODO markers, or skipped tests are still in the added lines" },
+];
+
+export async function prePushHook(args: string[]): Promise<Renderable> {
+  const p = parseArgs(args, { "--block-on": "value", "--range": "value", "--file": "value" }, "hook pre-push");
+  const blockOn = p.values["--block-on"] ?? "none";
+  if (!["flags", "none"].includes(blockOn)) throw validation("--block-on must be flags or none");
+
+  let diffArgs: string[];
+  let commits: string[];
+  let key: string;
+  let branch: string;
+  const range = p.values["--range"];
+  const patchFile = p.values["--file"];
+  if (patchFile) {
+    // A patch on disk has no commit history to read; the questions fall back to the diff alone.
+    diffArgs = [];
+    commits = [];
+    branch = patchFile;
+    key = "";
+  } else if (range) {
+    diffArgs = [range];
+    try {
+      commits = runGit(["rev-list", "--max-count", String(PUSH_THRESHOLDS.maxCommits + 1), range]).trim().split("\n").filter(Boolean);
+    } catch {
+      return "";
+    }
+    if (commits.length === 0) return "";
+    branch = range;
+    key = "";
+  } else {
+    if (isStdinTTY()) throw validation("hook pre-push reads git's ref updates on stdin", ["Pass --range <a..b> to check a range by hand"]);
+    const updates = parsePushUpdates(readStdinSync());
+    if (updates.length === 0) return "";
+    // Judge the largest update; a push of several branches at once is rare and one report is enough.
+    let chosen: { u: PushUpdate; r: NonNullable<ReturnType<typeof pushRange>> } | undefined;
+    for (const u of updates) {
+      const r = pushRange(u);
+      if (r && (!chosen || r.commits.length > chosen.r.commits.length)) chosen = { u, r };
+    }
+    if (!chosen) return "";
+    diffArgs = chosen.r.diffArgs;
+    commits = chosen.r.commits;
+    branch = chosen.u.remoteRef.replace(/^refs\/heads\//, "");
+    let root = "";
+    try {
+      root = runGit(["rev-parse", "--show-toplevel"]).trim();
+    } catch {
+      root = process.cwd();
+    }
+    key = `${root}#${chosen.u.remoteRef}#${chosen.u.localSha}`;
+    if (pushAlreadyWarned(key)) return "";
+  }
+
+  const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
+  if (commits.length > PUSH_THRESHOLDS.maxCommits) return `jev-axi: ${plural(commits.length, "commit")} to push, skipped review (limit ${PUSH_THRESHOLDS.maxCommits})`;
+
+  let files: FileDiff[];
+  let diff: string;
+  try {
+    diff = patchFile ? loadDiff({ file: patchFile }).text : runGit(["diff", "--no-color", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/", ...diffArgs]);
+    files = parseDiff(diff);
+  } catch (error) {
+    if (patchFile) throw error;
+    return "";
+  }
+  if (files.length === 0) return "";
+  if (files.length > PUSH_THRESHOLDS.maxFiles) return `jev-axi: ${plural(files.length, "file")} in the push, skipped review (limit ${PUSH_THRESHOLDS.maxFiles})`;
+
+  diff = redactSecrets(diff);
+  if (diff.length > PUSH_THRESHOLDS.diffChars) diff = `${diff.slice(0, PUSH_THRESHOLDS.diffChars)}\n... (truncated, ${diff.length} chars total)`;
+  const subjects = patchFile
+    ? []
+    : commits.map((sha) => {
+        try {
+          return runGit(["log", "-1", "--format=%s", sha]).trim();
+        } catch {
+          return sha;
+        }
+      });
+
+  let result;
+  try {
+    result = await evaluate(
+      { branch, commits: subjects, files: files.map((f) => `${f.path} +${f.added}/-${f.removed}`), diff },
+      PUSH_QUESTIONS,
+      { command: "git-hook", timeoutMs: GIT_HOOK_TIMEOUT_MS, maxRetries: 0 },
+    );
+  } catch (error) {
+    return skipped("pre-push review", error);
+  }
+
+  const scored = PUSH_CONCERNS.map((c) => ({ ...c, p: (result.answers[c.id] as NoulAnswer).noul }));
+  const raised = scored.filter((c) => c.p >= PUSH_THRESHOLDS.warn);
+  if (key) pushRecordWarned(key);
+  const scale = patchFile ? plural(files.length, "file") : `${plural(commits.length, "commit")}, ${plural(files.length, "file")}`;
+  const json = p.bools["--json"];
+  // A hook should stay quiet when it has nothing to say; --json always reports every score.
+  if (raised.length === 0 && !json) return `jev-axi: ${scale}, nothing flagged`;
+
+  const block = blockOn === "flags" && raised.some((c) => c.p >= PUSH_THRESHOLDS.block);
+  if (block) process.exitCode = 1;
+  const help = raised.map((c) => c.help);
+  if (raised.length) help.push(block ? "Fix these, or bypass once with `git push --no-verify`" : "Warnings only; the push continues");
+  if (key) help.push("This range is reported once; pushing the same commits again stays quiet");
+  return finish(
+    p,
+    {
+      jev_axi_pre_push: raised.length === 0 ? `nothing flagged (${scale})` : `${block ? "blocked" : "warning"}: ${raised.map((c) => c.label).join(", ")} (${scale})`,
+      concerns: (json ? scored : raised).map((c) => ({ concern: c.label, p: Math.round(c.p * 100) / 100, raised: c.p >= PUSH_THRESHOLDS.warn })),
+    },
+    [result],
+    help,
+  );
 }
 
 /** Subject and body from a commit message file, without comments or the verbose diff. */
@@ -164,6 +379,11 @@ ${MARKER}; remove with: jev-axi setup git-hooks --remove
 command -v jev-axi >/dev/null 2>&1 || exit 0
 exec jev-axi hook commit-msg "$1"
 `,
+  "pre-push": `#!/bin/sh
+${MARKER}; remove with: jev-axi setup git-hooks --remove
+command -v jev-axi >/dev/null 2>&1 || exit 0
+exec jev-axi hook pre-push
+`,
 };
 
 export interface GitHookStatus {
@@ -194,6 +414,7 @@ export function configureGitHooks(remove: boolean): { dir: string; hooks: GitHoo
         `core.hooksPath is set to ${custom} (husky, lefthook, or similar); add these to that tool's hooks instead:`,
         "pre-commit: if command -v jev-axi >/dev/null 2>&1; then jev-axi hook pre-commit || exit 1; fi",
         'commit-msg: if command -v jev-axi >/dev/null 2>&1; then jev-axi hook commit-msg "$1" || exit 1; fi',
+        "pre-push: if command -v jev-axi >/dev/null 2>&1; then jev-axi hook pre-push || exit 1; fi",
       ],
     };
   }
@@ -210,7 +431,8 @@ export function configureGitHooks(remove: boolean): { dir: string; hooks: GitHoo
     }
     if (exists && !ours) {
       hooks.push({ hook, status: "a different hook exists; left untouched" });
-      help.push(`To chain it, add to ${file}: ${hook === "pre-commit" ? "jev-axi hook pre-commit || exit 1" : 'jev-axi hook commit-msg "$1"'}`);
+      const chain = hook === "pre-commit" ? "jev-axi hook pre-commit || exit 1" : hook === "pre-push" ? "jev-axi hook pre-push || exit 1" : 'jev-axi hook commit-msg "$1"';
+      help.push(`To chain it, add to ${file}: ${chain}`);
       continue;
     }
     if (ours && readFileSync(file, "utf8") === script) {
@@ -224,7 +446,8 @@ export function configureGitHooks(remove: boolean): { dir: string; hooks: GitHoo
   }
   if (!remove && hooks.some((h) => /installed|updated/.test(h.status))) {
     help.push("pre-commit blocks only on credentials found locally; Jev review of the staged diff (credentials redacted) only warns");
-    help.push("Change behavior by editing the hook: `jev-axi hook pre-commit --block-on flags`, `jev-axi hook commit-msg \"$1\" --strict`");
+    help.push("pre-push judges the whole range being pushed and reports each range once; it never blocks unless you add --block-on flags");
+    help.push("Change behavior by editing the hook: `jev-axi hook pre-commit --block-on flags`, `jev-axi hook commit-msg \"$1\" --strict`, `jev-axi hook pre-push --block-on flags`");
   }
   return { dir, hooks, help };
 }

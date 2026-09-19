@@ -31,7 +31,6 @@ interface Case {
   job?: string;
   log?: string;
   events?: string;
-  command?: string;
   options?: string[];
   levels?: string[];
   expect: Expect;
@@ -282,6 +281,30 @@ function checkPrimitive(r: any, e: Expect): Check {
   return fail("no expectation", 0);
 }
 
+/**
+ * Every concern named in `raised` must clear the warn threshold and every other concern must
+ * stay below it, so flagging everything fails as surely as flagging nothing. The score is the
+ * mean probability mass on the expected side of each of the four questions.
+ */
+function checkPush(r: any, e: Expect): Check {
+  const a = allAnswers(r);
+  const ids = ["migration_without_note", "sensitive_area", "generated_by_hand", "unreviewed_leftovers"];
+  const want = new Set((e["raised"] as string[]) ?? []);
+  const warn = 0.6;
+  const problems: string[] = [];
+  const parts: number[] = [];
+  for (const id of ids) {
+    const p = Number(a[id]?.noul ?? 0);
+    const expected = want.has(id);
+    parts.push(expected ? p : 1 - p);
+    if (expected && p < warn) problems.push(`${id} ${r2(p)} below ${warn}`);
+    if (!expected && p >= warn) problems.push(`${id} ${r2(p)} raised unexpectedly`);
+  }
+  const score = parts.reduce((x, y) => x + y, 0) / parts.length;
+  const shown = ids.map((id) => `${id}=${r2(Number(a[id]?.noul ?? 0))}`).join(" ");
+  return problems.length === 0 ? ok(shown, score) : fail(`${problems.join("; ")} (${shown})`, score);
+}
+
 async function runCase(suite: Suite, c: Case): Promise<CaseResult> {
   const base = { recipe: suite.recipe, name: c.name };
   try {
@@ -319,6 +342,10 @@ async function runCase(suite: Suite, c: Case): Promise<CaseResult> {
         check = checkSafety(r, c.expect);
         break;
       }
+      case "push":
+        r = await run(["hook", "pre-push", "--file", join(ROOT, c.file!)]);
+        check = checkPush(r, c.expect);
+        break;
       case "progress": {
         const args = ["progress", "--job", c.job!, "--file", join(ROOT, c.file!)];
         if (c.log) args.push("--log", join(ROOT, c.log));

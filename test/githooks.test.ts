@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { configureFetch } from "../src/client.js";
 import { main } from "../src/cli.js";
-import { configureGitHooks, parseCommitMessage } from "../src/commands/githooks.js";
+import { configureGitHooks, parseCommitMessage, parsePushUpdates, pushAlreadyWarned, pushRange, pushRecordWarned } from "../src/commands/githooks.js";
 import { parseDiff, scanAddedLines, testStem } from "../src/git.js";
 
 // Assembled at runtime so no key-shaped literal lives in the repo.
@@ -104,11 +104,12 @@ describe("setup git-hooks", () => {
     expect(first.hooks).toEqual([
       { hook: "pre-commit", status: "installed" },
       { hook: "commit-msg", status: "a different hook exists; left untouched" },
+      { hook: "pre-push", status: "installed" },
     ]);
     expect(readFileSync(join(hooksDir, "pre-commit"), "utf8")).toContain("exec jev-axi hook pre-commit");
     expect(configureGitHooks(false).hooks[0]!.status).toBe("already installed (no-op)");
     const removed = configureGitHooks(true);
-    expect(removed.hooks.map((h) => h.status)).toEqual(["removed", "not ours, left untouched"]);
+    expect(removed.hooks.map((h) => h.status)).toEqual(["removed", "not ours, left untouched", "removed"]);
     expect(existsSync(join(hooksDir, "commit-msg"))).toBe(true);
   });
 
@@ -154,5 +155,119 @@ describe("hook pre-commit", () => {
     await main(["hook", "pre-commit"], stdout);
     expect(out).toBe("");
     expect(process.exitCode).toBe(0);
+  });
+});
+
+const ZEROS = "0".repeat(40);
+
+/** A repo with a bare origin, one pushed commit, and one unpushed commit. */
+function repoWithRemote(): { dir: string; localSha: string; remoteSha: string; branch: string } {
+  const dir = repo();
+  const origin = mkdtempSync(join(tmpdir(), "jev-githooks-origin-"));
+  git(origin, "init", "-q", "--bare");
+  writeFileSync(join(dir, "a.js"), "export const a = 1;\n");
+  git(dir, "add", "a.js");
+  git(dir, "commit", "-qm", "first");
+  git(dir, "remote", "add", "origin", origin);
+  const branch = git(dir, "rev-parse", "--abbrev-ref", "HEAD").trim();
+  git(dir, "push", "-q", "origin", branch);
+  const remoteSha = git(dir, "rev-parse", "HEAD").trim();
+  writeFileSync(join(dir, "b.js"), "export const b = 2; // TODO: finish\n");
+  git(dir, "add", "b.js");
+  git(dir, "commit", "-qm", "second");
+  const localSha = git(dir, "rev-parse", "HEAD").trim();
+  return { dir, localSha, remoteSha, branch };
+}
+
+describe("pre-push ref updates", () => {
+  it("parses git's ref update lines and skips deletions and malformed lines", () => {
+    const stdin = [
+      `refs/heads/main aaa111 refs/heads/main bbb222`,
+      `(delete) ${ZEROS} refs/heads/gone ccc333`,
+      `garbage`,
+      ``,
+      `refs/tags/v1 ddd444 refs/tags/v1 ${ZEROS}`,
+    ].join("\n");
+    const updates = parsePushUpdates(stdin);
+    expect(updates.map((u) => u.localSha)).toEqual(["aaa111", "ddd444"]);
+  });
+
+  it("uses remote..local when the remote already has the branch", () => {
+    const { dir, localSha, remoteSha, branch } = repoWithRemote();
+    process.chdir(dir);
+    const r = pushRange({ localRef: `refs/heads/${branch}`, localSha, remoteRef: `refs/heads/${branch}`, remoteSha });
+    expect(r?.commits).toEqual([localSha]);
+    expect(r?.diffArgs).toEqual([remoteSha, localSha]);
+  });
+
+  it("for a new branch reviews only commits no remote has", () => {
+    const { dir, localSha, branch } = repoWithRemote();
+    process.chdir(dir);
+    const r = pushRange({ localRef: `refs/heads/${branch}`, localSha, remoteRef: "refs/heads/feature", remoteSha: ZEROS });
+    // The first commit is already on origin, so only the second is under review.
+    expect(r?.commits).toEqual([localSha]);
+  });
+
+  it("returns nothing when the remote is already up to date", () => {
+    const { dir, remoteSha, branch } = repoWithRemote();
+    process.chdir(dir);
+    expect(pushRange({ localRef: `refs/heads/${branch}`, localSha: remoteSha, remoteRef: `refs/heads/${branch}`, remoteSha })).toBeUndefined();
+  });
+
+  it("remembers a range so the same push is only reported once", () => {
+    expect(pushAlreadyWarned("/repo#refs/heads/main#abc")).toBe(false);
+    pushRecordWarned("/repo#refs/heads/main#abc");
+    expect(pushAlreadyWarned("/repo#refs/heads/main#abc")).toBe(true);
+    expect(pushAlreadyWarned("/repo#refs/heads/main#def")).toBe(false);
+  });
+});
+
+describe("hook pre-push", () => {
+  it("warns about the range, with credentials redacted, without blocking", async () => {
+    const { dir } = repoWithRemote();
+    process.chdir(dir);
+    writeFileSync(join(dir, "db.js"), 'const DB_PASSWORD = "hunter2-prod-7731";\n');
+    git(dir, "add", "db.js");
+    git(dir, "commit", "-qm", "third");
+    const bodies = fakeApi(0.95);
+    await main(["hook", "pre-push", "--range", "HEAD~2..HEAD"], stdout);
+    expect(process.exitCode).toBe(0);
+    expect(out).toContain("warning:");
+    expect(bodies.length).toBeGreaterThan(0);
+    expect(bodies.join("")).not.toContain("hunter2-prod-7731");
+  });
+
+  it("says nothing is flagged when every concern is below the threshold", async () => {
+    const { dir } = repoWithRemote();
+    process.chdir(dir);
+    fakeApi(0.1);
+    await main(["hook", "pre-push", "--range", "HEAD~1..HEAD"], stdout);
+    expect(process.exitCode).toBe(0);
+    expect(out).toContain("nothing flagged");
+  });
+
+  it("blocks on a strong concern only with --block-on flags", async () => {
+    const { dir } = repoWithRemote();
+    process.chdir(dir);
+    fakeApi(0.95);
+    await main(["hook", "pre-push", "--range", "HEAD~1..HEAD", "--block-on", "flags"], stdout);
+    expect(process.exitCode).toBe(1);
+    expect(out).toContain("blocked:");
+  });
+
+  it("is silent when the range has no commits", async () => {
+    const { dir } = repoWithRemote();
+    process.chdir(dir);
+    await main(["hook", "pre-push", "--range", "HEAD..HEAD"], stdout);
+    expect(out).toBe("");
+    expect(process.exitCode).toBe(0);
+  });
+
+  it("rejects an unknown --block-on value", async () => {
+    const { dir } = repoWithRemote();
+    process.chdir(dir);
+    await main(["hook", "pre-push", "--range", "HEAD~1..HEAD", "--block-on", "secrets"], stdout);
+    expect(process.exitCode).not.toBe(0);
+    expect(out).toContain("--block-on");
   });
 });

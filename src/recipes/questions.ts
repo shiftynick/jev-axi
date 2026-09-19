@@ -219,6 +219,61 @@ export const COMMIT_THRESHOLDS = {
   diffChars: 12000,
 };
 
+/* ------------------------------- pre-push ------------------------------- */
+
+/**
+ * Asked about everything a push would send, as one range rather than per commit.
+ * State: `diff` (bounded, credentials redacted), `files` (paths with line counts),
+ * `commits` (subjects), and `branch`. These are deliberately the judgments that only
+ * make sense across a whole range -- per-file risk, leftovers, and secrets are the
+ * `diff` recipe's job and already run in pre-commit.
+ */
+export const PUSH_QUESTIONS: QuestionSet = {
+  migration_without_note: {
+    type: "noul",
+    instructions:
+      "Does `diff` change a database schema, a migration file, or a stored data format, while neither `commits` nor `diff` mentions how to roll it back, deploy it, or run it?",
+    criteria: {
+      true: "A schema or migration change with no rollback, deploy, or ordering note anywhere in the commit subjects or the diff",
+      false: "No schema or data-format change, or the change comes with a note about rollback, deployment, or ordering",
+    },
+  },
+  sensitive_area: {
+    type: "noul",
+    instructions:
+      "Does `diff` change authentication, authorization, permission checks, cryptography, session or token handling, or how credentials are stored or read?",
+    criteria: {
+      true: "Edits the code that decides who may do what, or that signs, encrypts, or loads secrets",
+      false: "Touches none of those, or only reads a value that such code produced",
+    },
+  },
+  generated_by_hand: {
+    type: "noul",
+    instructions:
+      "Does `diff` hand-edit files that a build or tool normally produces -- bundled or minified output, compiled assets, vendored third-party directories, or generated clients -- as opposed to source files and dependency lockfiles?",
+    criteria: {
+      true: "Edits inside dist, build, vendor, node_modules, or a file whose header says it is generated",
+      false: "Only source, config, docs, tests, or a lockfile updated alongside its manifest",
+    },
+  },
+  unreviewed_leftovers: {
+    type: "noul",
+    instructions:
+      "Do the added lines in `diff` still contain work-in-progress markers: debugging print statements, commented-out code, TODO/FIXME/XXX notes, skipped or disabled tests, or hardcoded local paths and ports?",
+  },
+};
+
+export const PUSH_THRESHOLDS = {
+  /** A concern is reported at or above this; below it the hook says nothing. */
+  warn: 0.6,
+  /** Above this a concern is strong enough for `--block-on flags` to fail the push. */
+  block: 0.8,
+  diffChars: 20000,
+  /** Ranges wider than this are not sent: a first push of a long-lived branch, or a merge. */
+  maxFiles: 60,
+  maxCommits: 50,
+};
+
 /* -------------------------------- safety -------------------------------- */
 
 /**

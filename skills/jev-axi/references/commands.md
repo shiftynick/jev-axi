@@ -487,6 +487,7 @@ examples:
 ```
 usage: jev-axi hook pre-tool-use [--agent claude|codex] [--input <json|path>] [--on-error allow|ask|deny] [--explain]
        jev-axi hook pre-commit [--block-on secrets|flags|none]   |   jev-axi hook commit-msg <file> [--strict]
+       jev-axi hook pre-push [--block-on flags|none] [--range <a..b>]
 Safety check for a tool call an agent is about to make, run as a PreToolUse hook. Reads the hook JSON on stdin.
 Routine calls (read-only commands, the project's tests and builds, edits inside the project) are decided locally with
 no API call. Other calls are sent to Jev with secrets redacted and scored for destructive actions, exfiltration,
@@ -514,6 +515,11 @@ git hooks (install: jev-axi setup git-hooks):
   commit-msg <file>    checks the message describes the staged diff, and follows Conventional Commits when the
                        repo's history does (warns)
     --strict           block when the message does not describe the diff
+  pre-push             judges everything the push would send, as one range: schema change with no rollback note,
+                       auth/crypto/permission changes, hand-edited generated files, work-in-progress leftovers (warns)
+    --block-on <what>  none (default): never block; flags: block when a concern is strong
+    --range <a..b>     judge this range instead of reading git's ref updates on stdin
+    --file <patch>     judge a patch file instead (no commit subjects are available)
   Both skip quietly when there is no API key or the API is unreachable. Bypass once with git commit --no-verify.
 log: every decision that reaches Jev is appended to ~/.config/jev-axi/stats/safety.jsonl
 examples:

@@ -1,0 +1,24 @@
+recipe: push
+description: >
+  Range-level concerns the pre-push hook reports. Each case names the concerns that must be
+  raised; every other concern must stay below the warn threshold, so a case that flags
+  everything fails just as a case that flags nothing does.
+cases:
+  - name: migration-without-rollback-note
+    file: bench/fixtures/patches/push-migration.diff
+    expect: { raised: [migration_without_note] }
+  - name: permission-logic-change
+    file: bench/fixtures/patches/push-auth.diff
+    expect: { raised: [sensitive_area] }
+  - name: hand-edited-bundle-and-vendor
+    file: bench/fixtures/patches/push-generated.diff
+    expect: { raised: [generated_by_hand] }
+  - name: wip-leftovers-and-skipped-test
+    file: bench/fixtures/patches/leftovers.diff
+    expect: { raised: [unreviewed_leftovers] }
+  - name: docs-only-is-quiet
+    file: bench/fixtures/patches/docs-only.diff
+    expect: { raised: [] }
+  - name: behavior-change-is-not-a-push-concern
+    file: bench/fixtures/patches/behavior-no-test.diff
+    expect: { raised: [] }

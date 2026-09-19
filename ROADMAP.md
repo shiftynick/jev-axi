@@ -38,7 +38,9 @@ Run the same checks with nobody asking.
   the changes against the job, and a PostToolUse hook that notices a stuck, drifting, or blocked
   agent, for Claude Code and Codex. Warn-only by default.
 - ⚪ **Calibrated supervision thresholds**, learned from `stats/supervise.jsonl`.
-- ⚪ **pre-push hook**: risky changes such as migrations without a note.
+- 🟢 **pre-push hook** (`jev-axi hook pre-push`, installed by `setup git-hooks`): judges the pushed
+  range for migrations without a rollback note, auth/permission/crypto changes, hand-edited
+  generated files, and leftovers, reporting each range once.
 - 💭 **Pull request routing**: pick reviewers and labels from the diff, a Choice over
   CODEOWNERS entries.
 - 💭 **Flaky-test ledger**: classify each failure as environmental or real over time, per

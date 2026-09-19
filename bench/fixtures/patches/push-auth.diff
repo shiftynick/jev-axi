@@ -1,0 +1,36 @@
+diff --git a/src/auth/permissions.ts b/src/auth/permissions.ts
+index 2f9a1b0..c4e77a8 100644
+--- a/src/auth/permissions.ts
++++ b/src/auth/permissions.ts
+@@ -8,12 +8,18 @@ const ROLE_RANK: Record<Role, number> = {
+   viewer: 1,
+   editor: 2,
+   admin: 3,
+ };
+ 
+-export function canEdit(user: User, doc: Document): boolean {
+-  if (doc.ownerId === user.id) return true;
+-  return ROLE_RANK[user.role] >= ROLE_RANK.editor;
++export function canEdit(user: User, doc: Document): boolean {
++  if (doc.ownerId === user.id) return true;
++  if (user.impersonating) return ROLE_RANK[user.impersonating.role] >= ROLE_RANK.editor;
++  return ROLE_RANK[user.role] >= ROLE_RANK.editor;
++}
++
++export function canDelete(user: User, doc: Document): boolean {
++  // Deletion follows the same rank check as editing.
++  return canEdit(user, doc) || ROLE_RANK[user.role] >= ROLE_RANK.admin;
+ }
+diff --git a/test/permissions.test.ts b/test/permissions.test.ts
+index 11aa22b..99cc33d 100644
+--- a/test/permissions.test.ts
++++ b/test/permissions.test.ts
+@@ -20,4 +20,10 @@ describe("canEdit", () => {
+     expect(canEdit(viewer, otherDoc)).toBe(false);
+   });
++
++  it("lets an impersonating editor edit", () => {
++    const user = { ...viewer, impersonating: { role: "editor" } };
++    expect(canEdit(user, otherDoc)).toBe(true);
++  });
+ });
