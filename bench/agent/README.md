@@ -1,5 +1,8 @@
 # Agent benchmark
 
+Writeup of what these runs showed, and what they did not:
+[docs/skills-do-not-get-used.md](../../docs/skills-do-not-get-used.md).
+
 Measures whether Claude Code gets real work done cheaper, faster, or more correctly when
 jev-axi is available. Each task runs as a headless `claude -p` session in a fresh copy of a
 pinned repository (`tasks.yaml` names the repo and commit), under these conditions:

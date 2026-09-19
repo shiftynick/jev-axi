@@ -89,7 +89,9 @@ Beyond safety, agents use it wherever a fast calibrated call beats reading or re
 changed cost and file reads by less than run-to-run noise, and *telling* it to use
 ranking made things worse: 18 median file reads against a baseline of 14, at 15% higher
 cost. Answering a question still meant reading the code. Use jev-axi for judgments,
-not as a replacement for reading.
+not as a replacement for reading. The full writeup, including the more interesting
+result that the agent never loaded the skill unprompted, is in
+[docs/skills-do-not-get-used.md](docs/skills-do-not-get-used.md).
 
 ```sh
 npm install -g jev-axi        # or: npx -y jev-axi ...
