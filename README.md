@@ -85,12 +85,13 @@ Beyond safety, agents use it wherever a fast calibrated call beats reading or re
 - **Unfamiliar code:** shortlist the files and lines for a task in a large repo (`files`, `find`).
 
 **What it does not do** is make agents cheaper at understanding code. In our
-[benchmark](bench/agent/README.md) on a 390k-line repo, giving an agent file ranking
-changed cost and file reads by less than run-to-run noise, and *telling* it to use
-ranking made things worse: 18 median file reads against a baseline of 14, at 15% higher
-cost. Answering a question still meant reading the code. Use jev-axi for judgments,
-not as a replacement for reading. The full writeup, including the more interesting
-result that the agent never loaded the skill unprompted, is in
+[benchmark](bench/agent/README.md) on a 390k-line repo, file ranking moved cost and
+file reads by less than run-to-run noise: telling the agent to use ranking looked
+like a 25% saving in one session and a 29% penalty in another, and mean and median
+disagree in sign within a single session. Six runs per condition cannot call a
+direction. Answering a question still meant reading the code, so use jev-axi for
+judgments, not as a replacement for reading. The full writeup, including the more
+interesting result that the agent never loaded the skill unprompted, is in
 [docs/skills-do-not-get-used.md](docs/skills-do-not-get-used.md).
 
 ```sh
