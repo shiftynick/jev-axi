@@ -5,8 +5,9 @@ import { parseArgs } from "../args.js";
 import { evaluate, type NoulAnswer, type ScoreAnswer } from "../client.js";
 import { ensureDir, paths } from "../config.js";
 import { AxiError, validation } from "../errors.js";
-import { SAFETY_QUESTIONS } from "../recipes/questions.js";
-import { buildSafetyState, decide, hookOutput, localVerdict, reasonText, redactSecrets, type Decision, type ToolCall } from "../safety.js";
+import { POLICY_QUESTIONS, SAFETY_QUESTIONS } from "../recipes/questions.js";
+import { configuredPolicyFile, editsPolicyFile, loadPolicy } from "../policy.js";
+import { buildSafetyState, decide, decidePolicy, hookOutput, localVerdict, reasonText, redactSecrets, type Decision, type ToolCall } from "../safety.js";
 import { GIT_HOOKS_HELP, commitMsgHook, preCommitHook, prePushHook } from "./githooks.js";
 import { isStdinTTY, readStdinSync } from "../stdin.js";
 import { assess, readSession, readTranscript, recordEvent, workDiff, type Assessment } from "../supervise.js";
@@ -20,11 +21,12 @@ Safety check for a tool call an agent is about to make, run as a PreToolUse hook
 Routine calls (read-only commands, the project's tests and builds, edits inside the project) are decided locally with
 no API call. Other calls are sent to Jev with secrets redacted and scored for destructive actions, exfiltration,
 running downloaded code, weakening security, and changes outside the project.
+When safety.policyFile is configured, every covered call is checked against that policy, including routine calls.
 output: nothing (normal permission flow applies; never auto-approves), or a PreToolUse decision JSON to ask or deny.
 flags:
   --agent <name>       output format: claude (default) or codex (Codex supports only deny, so ask becomes deny)
   --input <json|path>  hook JSON instead of stdin, for testing
-  --on-error <mode>    auto (default: deny API 403, allow other errors), allow, ask, or deny
+  --on-error <mode>    auto (default: deny API 403, ask other errors with a policy, allow otherwise), allow, ask, or deny
   --explain            print the decision, scores, and reason as TOON instead of hook JSON
 install: jev-axi setup safety [--project] [--agent claude|codex]
 supervision hooks for Claude Code and Codex (install: jev-axi setup supervise [--project] [--agent claude|codex] [--block]):
@@ -109,23 +111,58 @@ export async function judgeToolCall(
   call: ToolCall,
   opts: { agent: string; onError: ErrorPolicy; timeoutMs: number },
 ): Promise<Judgment> {
+  let policyFile: string | undefined;
+  try {
+    policyFile = configuredPolicyFile();
+  } catch (error) {
+    const decision = opts.onError === "auto" ? "ask" : opts.onError;
+    const reason = `jev-axi safety settings unavailable (${(error as Error).message}); on-error policy: ${opts.onError}, decision: ${decision}.`;
+    const j: Judgment = { decision, source: "error", reason, detail: { error: (error as Error).message } };
+    logDecision({ agent: opts.agent, tool: call.tool_name, decision, input: "[settings error]", cwd: call.cwd, ...j.detail });
+    return j;
+  }
   const local = localVerdict(call);
-  if (local.decision === "allow") return { decision: "allow", source: "local", reason: local.reason, detail: {} };
+  if (!policyFile && local.decision === "allow") return { decision: "allow", source: "local", reason: local.reason, detail: {} };
   const summary = redactSecrets(String(call.tool_input["command"] ?? call.tool_input["file_path"] ?? "")).slice(0, 200);
   let j: Judgment;
   try {
-    const r = await evaluate(buildSafetyState(call), SAFETY_QUESTIONS, { command: opts.agent === "exec" ? "guard-exec" : "hook", timeoutMs: opts.timeoutMs, maxRetries: 0 });
+    const policy = policyFile ? loadPolicy(policyFile) : undefined;
+    if (policy && (editsPolicyFile(call, policy.path) || editsPolicyFile(call, paths.configFile()))) {
+      j = { decision: "deny", source: "local", reason: "jev-axi safety check: an agent cannot directly edit the configured policy or its settings file.", detail: { policyFile: policy.path } };
+      logDecision({ agent: opts.agent, tool: call.tool_name, decision: j.decision, input: summary, cwd: call.cwd, ...j.detail });
+      return j;
+    }
+    const state = buildSafetyState(call) as Record<string, import("@typesafe-ai/sdk").EntryType>;
+    if (policy) {
+      state["policy"] = policy.text;
+      state["policy_file"] = policy.path;
+      state["policy_config_file"] = paths.configFile();
+    }
+    const questions = policy ? { ...SAFETY_QUESTIONS, ...POLICY_QUESTIONS } : SAFETY_QUESTIONS;
+    const r = await evaluate(state, questions, { command: opts.agent === "exec" ? "guard-exec" : "hook", timeoutMs: opts.timeoutMs, maxRetries: 0 });
     const hazards = Object.fromEntries(
-      Object.entries(r.answers).filter(([, a]) => a.type === "noul").map(([k, a]) => [k, Math.round((a as NoulAnswer).noul * 100) / 100]),
+      Object.keys(SAFETY_QUESTIONS).filter((k) => k !== "risk").map((k) => [k, Math.round((r.answers[k] as NoulAnswer).noul * 100) / 100]),
     );
     const risk = Math.round((r.answers["risk"] as ScoreAnswer).score * 100) / 100;
-    const verdict = decide({ hazards, risk });
-    const reason = verdict.decision === "allow" ? "no hazard above thresholds" : reasonText(verdict.decision, verdict.top, risk, opts.agent === "exec" ? "human" : "agent");
-    j = { decision: verdict.decision, source: "jev", reason, detail: { hazards, risk, top: verdict.top[0] } };
+    const builtIn = decide({ hazards, risk });
+    const policyScores = policy ? {
+      forbidden: Math.round((r.answers["policy_forbidden"] as NoulAnswer).noul * 100) / 100,
+      approval: Math.round((r.answers["policy_approval"] as NoulAnswer).noul * 100) / 100,
+    } : undefined;
+    const policyVerdict = policyScores ? decidePolicy(policyScores.forbidden, policyScores.approval) : undefined;
+    const verdict = builtIn.decision === "deny" || !policyVerdict || policyVerdict.decision === "allow" ? builtIn
+      : policyVerdict.decision === "deny" || builtIn.decision === "allow" ? policyVerdict : builtIn;
+    const reason = verdict.decision === "allow" ? "no hazard or policy rule above thresholds"
+      : verdict.top[0] === "policy_forbidden"
+        ? `jev-axi policy check: ${verdict.decision === "deny" ? "likely prohibited" : "possible prohibition"} (p=${verdict.top[1].toFixed(2)}). ${verdict.decision === "deny" ? "Blocked. Ask the user to review the policy and act directly if appropriate." : "Get user review before running."}`
+        : verdict.top[0] === "policy_approval"
+          ? `jev-axi policy check: likely requires user approval (p=${verdict.top[1].toFixed(2)}). Get explicit user approval before running.`
+          : reasonText(verdict.decision, verdict.top, risk, opts.agent === "exec" ? "human" : "agent");
+    j = { decision: verdict.decision, source: "jev", reason, detail: { hazards, risk, top: verdict.top[0], ...(policyScores ? { policy: policyScores } : {}) } };
   } catch (error) {
     const message = (error as Error).message;
     const rejected = error instanceof AxiError && error.code === "API_REJECTED";
-    const decision = opts.onError === "auto" ? (rejected ? "deny" : "allow") : opts.onError;
+    const decision = opts.onError === "auto" ? (rejected ? "deny" : policyFile ? "ask" : "allow") : opts.onError;
     const reason = rejected
       ? `jev-axi safety check rejected by the API (403); on-error policy: ${opts.onError}, decision: ${decision}.`
       : `jev-axi safety check unavailable (${message}); on-error policy: ${opts.onError}, decision: ${decision}.`;

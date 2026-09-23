@@ -260,6 +260,17 @@ export function decide(scores: SafetyScores, t: SafetyThresholds = DEFAULT_SAFET
   return { decision: "allow", top };
 }
 
+/** A policy can forbid an action or allow it after approval; keep those signals separate. */
+export function decidePolicy(forbidden: number, approval: number): { decision: Decision; top: [string, number] } {
+  if (forbidden >= 0.8) return { decision: "deny", top: ["policy_forbidden", forbidden] };
+  if (forbidden >= 0.45 || approval >= 0.75) {
+    return forbidden >= approval
+      ? { decision: "ask", top: ["policy_forbidden", forbidden] }
+      : { decision: "ask", top: ["policy_approval", approval] };
+  }
+  return { decision: "allow", top: ["policy", Math.max(forbidden, approval)] };
+}
+
 const HAZARD_TEXT: Record<string, string> = {
   destructive: "irreversible deletion or overwrite of data",
   exfiltration: "sending secrets or private files off the machine",

@@ -22,6 +22,7 @@ import {
   type JevConfig,
 } from "../config.js";
 import { validation } from "../errors.js";
+import { loadPolicy } from "../policy.js";
 import { availableUpdate, refreshUpdateCheck, updateHelp, updateLine } from "../update.js";
 import { VERSION } from "../version.js";
 import { round } from "../format.js";
@@ -108,10 +109,12 @@ keys:
   act, confirm     band thresholds on confidence (default ${DEFAULT_THRESHOLDS.act} / ${DEFAULT_THRESHOLDS.confirm})
   cacheTtlHours    hours a cached response is reused (default ${DEFAULT_CACHE_TTL_HOURS}; 0 disables the cache)
   updateCheck      false turns off the daily npm registry lookup behind the "update available" notice (default true)
+  safety.policyFile  absolute path to a written policy used by the safety hook and guard-exec
 examples:
   jev-axi config
   jev-axi config set model jev-preview
   jev-axi config set price.input 0.10
+  jev-axi config set safety.policyFile ~/safety-policy.md
 `;
 
 export async function configCommand(args: string[]): Promise<AxiRenderable> {
@@ -137,7 +140,7 @@ function applyConfig(c: JevConfig, key: string, value: string | undefined): JevC
     if (!Number.isFinite(n) || n < 0) throw validation(`${key} must be a non-negative number`);
     return n;
   };
-  const next: JevConfig = { ...c, price: { ...c.price }, thresholds: { ...c.thresholds } };
+  const next: JevConfig = { ...c, price: { ...c.price }, thresholds: { ...c.thresholds }, safety: { ...c.safety } };
   switch (key) {
     case "apiKey": next.apiKey = value; break;
     case "model": next.model = value; break;
@@ -150,7 +153,13 @@ function applyConfig(c: JevConfig, key: string, value: string | undefined): JevC
       if (value !== undefined && value !== "true" && value !== "false") throw validation("updateCheck must be true or false");
       next.updateCheck = value === undefined ? undefined : value === "true";
       break;
-    default: throw validation(`unknown config key ${JSON.stringify(key)}`, ["valid keys: apiKey, model, price.input, price.output, act, confirm, cacheTtlHours, updateCheck"]);
+    case "safety.policyFile":
+      if (value !== undefined) {
+        try { next.safety!.policyFile = loadPolicy(value).path; }
+        catch (e) { throw validation(`cannot use policy file: ${(e as Error).message}`); }
+      } else next.safety!.policyFile = undefined;
+      break;
+    default: throw validation(`unknown config key ${JSON.stringify(key)}`, ["valid keys: apiKey, model, price.input, price.output, act, confirm, cacheTtlHours, updateCheck, safety.policyFile"]);
   }
   return next;
 }
@@ -165,6 +174,7 @@ function showConfig(c: JevConfig): Record<string, unknown> {
     model: resolveModel(undefined, c),
     price: `$${resolvePrices(c).input}/1M in, $${resolvePrices(c).output}/1M out${c.price?.input === undefined && c.price?.output === undefined ? " (default)" : ""}`,
     thresholds: `act >= ${c.thresholds?.act ?? DEFAULT_THRESHOLDS.act}, confirm >= ${c.thresholds?.confirm ?? DEFAULT_THRESHOLDS.confirm}`,
+    policyFile: c.safety?.policyFile ?? "unset",
     cache: `${cacheCount()} responses in ${paths.cacheDir()}, reused for ${resolveCacheTtlHours(c)}h`,
     ...(update ? { help: [updateHelp(update)] } : {}),
   };

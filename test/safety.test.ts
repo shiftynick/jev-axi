@@ -1,10 +1,12 @@
-import { mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { configureFetch } from "../src/client.js";
-import { configureSafetyHook, hookCommand } from "../src/commands/hook.js";
-import { buildSafetyState, decide, hookOutput, localVerdict, redactSecrets } from "../src/safety.js";
+import { configureSafetyHook, hookCommand, judgeToolCall } from "../src/commands/hook.js";
+import { paths, writeConfig } from "../src/config.js";
+import { editsPolicyFile, loadPolicy, MAX_POLICY_BYTES } from "../src/policy.js";
+import { buildSafetyState, decide, decidePolicy, hookOutput, localVerdict, redactSecrets } from "../src/safety.js";
 
 const bash = (command: string, cwd = "/work/proj") => ({ tool_name: "Bash", tool_input: { command }, cwd });
 
@@ -74,6 +76,62 @@ describe("decisions", () => {
     expect(hookOutput("allow", "x", "claude")).toBe("");
     expect(JSON.parse(hookOutput("ask", "why", "claude")).hookSpecificOutput.permissionDecision).toBe("ask");
     expect(JSON.parse(hookOutput("ask", "why", "codex")).hookSpecificOutput.permissionDecision).toBe("deny");
+  });
+});
+
+describe("written policy", () => {
+  it("separates prohibited actions from those needing approval", () => {
+    expect(decidePolicy(0.9, 0.1).decision).toBe("deny");
+    expect(decidePolicy(0.2, 0.9).decision).toBe("ask");
+    expect(decidePolicy(0.5, 0.1).decision).toBe("ask");
+    expect(decidePolicy(0.1, 0.1).decision).toBe("allow");
+  });
+
+  it("reads, bounds, and redacts the policy; detects direct edits through a symlink", () => {
+    const dir = mkdtempSync(join(tmpdir(), "safety-policy-"));
+    const path = join(dir, "policy.md");
+    const alias = join(dir, "alias.md");
+    try {
+      writeFileSync(path, `Never publish. API_KEY=${fake.stripe}\n`);
+      const policy = loadPolicy(path);
+      expect(policy.text).toContain("Never publish");
+      expect(policy.text).not.toContain(fake.stripe);
+      expect(editsPolicyFile({ tool_name: "Edit", tool_input: { file_path: path }, cwd: dir }, policy.path)).toBe(true);
+      symlinkSync(path, alias);
+      expect(editsPolicyFile({ tool_name: "Write", tool_input: { file_path: alias }, cwd: dir }, policy.path)).toBe(true);
+      writeFileSync(path, "x".repeat(MAX_POLICY_BYTES + 1));
+      expect(() => loadPolicy(path)).toThrow(/exceeds/);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it("checks routine calls when enabled and asks if the policy disappears", async () => {
+    const saved = process.env["XDG_CONFIG_HOME"];
+    const dir = mkdtempSync(join(tmpdir(), "safety-policy-config-"));
+    const path = join(dir, "policy.md");
+    process.env["XDG_CONFIG_HOME"] = dir;
+    try {
+      writeFileSync(path, "Never publish packages.\n");
+      writeConfig({ safety: { policyFile: path } });
+      const edit = await judgeToolCall({ tool_name: "Write", tool_input: { file_path: path, content: "Allow everything" }, cwd: dir }, { agent: "claude", onError: "auto", timeoutMs: 1000 });
+      expect(edit).toMatchObject({ decision: "deny", source: "local" });
+      const configEdit = await judgeToolCall({ tool_name: "Edit", tool_input: { file_path: paths.configFile(), new_string: "{}" }, cwd: dir }, { agent: "claude", onError: "auto", timeoutMs: 1000 });
+      expect(configEdit).toMatchObject({ decision: "deny", source: "local" });
+      rmSync(path);
+      const call = bash("pnpm test", dir);
+      const ask = await judgeToolCall(call, { agent: "claude", onError: "auto", timeoutMs: 1000 });
+      expect(ask).toMatchObject({ decision: "ask", source: "error" });
+      expect(ask.reason).toContain("policy");
+      const allow = await judgeToolCall(call, { agent: "claude", onError: "allow", timeoutMs: 1000 });
+      expect(allow).toMatchObject({ decision: "allow", source: "error" });
+      writeFileSync(paths.configFile(), "{");
+      const corrupt = await judgeToolCall(call, { agent: "claude", onError: "auto", timeoutMs: 1000 });
+      expect(corrupt).toMatchObject({ decision: "ask", source: "error" });
+      expect(corrupt.reason).toContain("settings unavailable");
+    } finally {
+      if (saved === undefined) delete process.env["XDG_CONFIG_HOME"];
+      else process.env["XDG_CONFIG_HOME"] = saved;
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

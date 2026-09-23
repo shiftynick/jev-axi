@@ -251,6 +251,26 @@ project, before it runs:
 - **Audit log:** every decision that reached Jev is appended to
   `~/.config/jev-axi/stats/safety.jsonl`.
 
+To apply your own written rules, set a policy file:
+
+```sh
+jev-axi config set safety.policyFile ~/safety-policy.md
+jev-axi config unset safety.policyFile
+```
+
+With a policy configured, every covered `Bash`, `Write`, `Edit`, or `MultiEdit` call is
+sent to Jev, including routine calls and edits inside the project. The policy text is
+redacted for obvious credentials; it and the file path are sent with each check. `guard-exec`
+uses the same policy. Write rules that distinguish
+actions you prohibit from actions that need your approval. A likely prohibition blocks;
+an approval requirement asks. A direct file edit of the policy or Jev's settings file is blocked.
+The policy must be a nonempty regular file of at most 16 KiB. If it becomes unreadable,
+or Jev is unavailable, the default is to ask before proceeding (HTTP 403 still blocks).
+`--on-error` can override that default. Keep the policy in a location the agent does not
+normally edit: shell commands can change files indirectly, so this hook is a decision
+aid rather than an isolation boundary. The installed hook does not inspect other tool
+types, such as file reads or network tools provided by an agent.
+
 Test a call by hand:
 
 ```sh

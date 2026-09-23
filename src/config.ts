@@ -23,6 +23,8 @@ export interface JevConfig {
   cacheTtlHours?: number;
   /** false turns off the daily npm registry check behind the update notice. */
   updateCheck?: boolean;
+  /** User-owned instructions applied to every covered safety hook or guard-exec call. */
+  safety?: { policyFile?: string };
 }
 
 export const DEFAULT_CACHE_TTL_HOURS = 24;

@@ -492,11 +492,12 @@ Safety check for a tool call an agent is about to make, run as a PreToolUse hook
 Routine calls (read-only commands, the project's tests and builds, edits inside the project) are decided locally with
 no API call. Other calls are sent to Jev with secrets redacted and scored for destructive actions, exfiltration,
 running downloaded code, weakening security, and changes outside the project.
+When safety.policyFile is configured, every covered call is checked against that policy, including routine calls.
 output: nothing (normal permission flow applies; never auto-approves), or a PreToolUse decision JSON to ask or deny.
 flags:
   --agent <name>       output format: claude (default) or codex (Codex supports only deny, so ask becomes deny)
   --input <json|path>  hook JSON instead of stdin, for testing
-  --on-error <mode>    auto (default: deny API 403, allow other errors), allow, ask, or deny
+  --on-error <mode>    auto (default: deny API 403, ask other errors with a policy, allow otherwise), allow, ask, or deny
   --explain            print the decision, scores, and reason as TOON instead of hook JSON
 install: jev-axi setup safety [--project] [--agent claude|codex]
 supervision hooks for Claude Code and Codex (install: jev-axi setup supervise [--project] [--agent claude|codex] [--block]):
@@ -569,8 +570,10 @@ keys:
   act, confirm     band thresholds on confidence (default 0.75 / 0.45)
   cacheTtlHours    hours a cached response is reused (default 24; 0 disables the cache)
   updateCheck      false turns off the daily npm registry lookup behind the "update available" notice (default true)
+  safety.policyFile  absolute path to a written policy used by the safety hook and guard-exec
 examples:
   jev-axi config
   jev-axi config set model jev-preview
   jev-axi config set price.input 0.10
+  jev-axi config set safety.policyFile ~/safety-policy.md
 ```
