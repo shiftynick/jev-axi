@@ -7,6 +7,7 @@ export type ErrorCode =
   | "OVERLOADED"
   | "NETWORK"
   | "API_ERROR"
+  | "API_REJECTED"
   | "NOT_FOUND"
   | "UNKNOWN";
 

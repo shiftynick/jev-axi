@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { parseArgs } from "../args.js";
 import { evaluate, type NoulAnswer, type ScoreAnswer } from "../client.js";
 import { ensureDir, paths } from "../config.js";
-import { validation } from "../errors.js";
+import { AxiError, validation } from "../errors.js";
 import { SAFETY_QUESTIONS } from "../recipes/questions.js";
 import { buildSafetyState, decide, hookOutput, localVerdict, reasonText, redactSecrets, type Decision, type ToolCall } from "../safety.js";
 import { GIT_HOOKS_HELP, commitMsgHook, preCommitHook, prePushHook } from "./githooks.js";
@@ -13,7 +13,7 @@ import { assess, readSession, readTranscript, recordEvent, workDiff, type Assess
 import { PROGRESS_THRESHOLDS } from "../recipes/questions.js";
 import type { Renderable } from "./common.js";
 
-export const HOOK_HELP = `usage: jev-axi hook pre-tool-use [--agent claude|codex] [--input <json|path>] [--on-error allow|ask|deny] [--explain]
+export const HOOK_HELP = `usage: jev-axi hook pre-tool-use [--agent claude|codex] [--input <json|path>] [--on-error auto|allow|ask|deny] [--explain]
        jev-axi hook pre-commit [--block-on secrets|flags|none]   |   jev-axi hook commit-msg <file> [--strict]
        jev-axi hook pre-push [--block-on flags|none] [--range <a..b>]
 Safety check for a tool call an agent is about to make, run as a PreToolUse hook. Reads the hook JSON on stdin.
@@ -24,7 +24,7 @@ output: nothing (normal permission flow applies; never auto-approves), or a PreT
 flags:
   --agent <name>       output format: claude (default) or codex (Codex supports only deny, so ask becomes deny)
   --input <json|path>  hook JSON instead of stdin, for testing
-  --on-error <mode>    when Jev is unreachable or slow: allow (default, normal flow), ask, or deny
+  --on-error <mode>    auto (default: deny API 403, allow other errors), allow, ask, or deny
   --explain            print the decision, scores, and reason as TOON instead of hook JSON
 install: jev-axi setup safety [--project] [--agent claude|codex]
 supervision hooks for Claude Code and Codex (install: jev-axi setup supervise [--project] [--agent claude|codex] [--block]):
@@ -83,8 +83,8 @@ export async function hookCommand(args: string[]): Promise<Renderable> {
   if (p.positional[0] !== "pre-tool-use") throw validation("unknown hook", ["jev-axi hook pre-tool-use", "jev-axi hook stop", "jev-axi hook post-tool-use", "jev-axi hook pre-commit", "jev-axi hook commit-msg <file>", "jev-axi hook pre-push"]);
   const agent = (p.values["--agent"] ?? "claude") as "claude" | "codex";
   if (agent !== "claude" && agent !== "codex") throw validation("--agent must be claude or codex");
-  const onError = (p.values["--on-error"] ?? "allow") as Decision;
-  if (!["allow", "ask", "deny"].includes(onError)) throw validation("--on-error must be allow, ask, or deny");
+  const onError = (p.values["--on-error"] ?? "auto") as ErrorPolicy;
+  if (!["auto", "allow", "ask", "deny"].includes(onError)) throw validation("--on-error must be auto, allow, ask, or deny");
   const call = readCall(p);
   const j = await judgeToolCall(call, { agent, onError, timeoutMs: HOOK_TIMEOUT_MS });
   if (p.bools["--explain"]) {
@@ -102,10 +102,12 @@ export interface Judgment {
   detail: Record<string, unknown>;
 }
 
+export type ErrorPolicy = Decision | "auto";
+
 /** Decide a tool call locally when routine, otherwise with Jev. Jev decisions are logged. */
 export async function judgeToolCall(
   call: ToolCall,
-  opts: { agent: string; onError: Decision; timeoutMs: number },
+  opts: { agent: string; onError: ErrorPolicy; timeoutMs: number },
 ): Promise<Judgment> {
   const local = localVerdict(call);
   if (local.decision === "allow") return { decision: "allow", source: "local", reason: local.reason, detail: {} };
@@ -122,7 +124,12 @@ export async function judgeToolCall(
     j = { decision: verdict.decision, source: "jev", reason, detail: { hazards, risk, top: verdict.top[0] } };
   } catch (error) {
     const message = (error as Error).message;
-    j = { decision: opts.onError, source: "error", reason: `jev-axi safety check unavailable (${message}); on-error policy: ${opts.onError}.`, detail: { error: message } };
+    const rejected = error instanceof AxiError && error.code === "API_REJECTED";
+    const decision = opts.onError === "auto" ? (rejected ? "deny" : "allow") : opts.onError;
+    const reason = rejected
+      ? `jev-axi safety check rejected by the API (403); on-error policy: ${opts.onError}, decision: ${decision}.`
+      : `jev-axi safety check unavailable (${message}); on-error policy: ${opts.onError}, decision: ${decision}.`;
+    j = { decision, source: "error", reason, detail: { error: message } };
   }
   logDecision({ agent: opts.agent, tool: call.tool_name, decision: j.decision, input: summary, cwd: call.cwd, ...j.detail });
   return j;
