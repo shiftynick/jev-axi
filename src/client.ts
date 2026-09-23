@@ -314,7 +314,7 @@ function translateError(error: unknown): AxiError {
     ]);
   }
   if (error instanceof APIError) {
-    const code = error.status === 529 ? "OVERLOADED" : "API_ERROR";
+    const code = error.status === 529 ? "OVERLOADED" : error.status === 403 ? "API_REJECTED" : "API_ERROR";
     return new AxiError(`TypeSafe API error (${error.status}): ${detail(error.body) || error.message}`, code, [
       error.status === 529 ? "TypeSafe is overloaded; retry shortly" : "Retry; if it persists check https://status.typesafe.ai",
     ]);

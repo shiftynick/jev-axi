@@ -485,7 +485,7 @@ examples:
 ## hook
 
 ```
-usage: jev-axi hook pre-tool-use [--agent claude|codex] [--input <json|path>] [--on-error allow|ask|deny] [--explain]
+usage: jev-axi hook pre-tool-use [--agent claude|codex] [--input <json|path>] [--on-error auto|allow|ask|deny] [--explain]
        jev-axi hook pre-commit [--block-on secrets|flags|none]   |   jev-axi hook commit-msg <file> [--strict]
        jev-axi hook pre-push [--block-on flags|none] [--range <a..b>]
 Safety check for a tool call an agent is about to make, run as a PreToolUse hook. Reads the hook JSON on stdin.
@@ -496,7 +496,7 @@ output: nothing (normal permission flow applies; never auto-approves), or a PreT
 flags:
   --agent <name>       output format: claude (default) or codex (Codex supports only deny, so ask becomes deny)
   --input <json|path>  hook JSON instead of stdin, for testing
-  --on-error <mode>    when Jev is unreachable or slow: allow (default, normal flow), ask, or deny
+  --on-error <mode>    auto (default: deny API 403, allow other errors), allow, ask, or deny
   --explain            print the decision, scores, and reason as TOON instead of hook JSON
 install: jev-axi setup safety [--project] [--agent claude|codex]
 supervision hooks for Claude Code and Codex (install: jev-axi setup supervise [--project] [--agent claude|codex] [--block]):
@@ -529,7 +529,7 @@ examples:
 ## guard-exec
 
 ```
-usage: jev-axi guard-exec [--on-ask prompt|deny|allow] [--on-error allow|deny] [--dry-run] [--quiet] -- <command...>
+usage: jev-axi guard-exec [--on-ask prompt|deny|allow] [--on-error auto|allow|deny] [--dry-run] [--quiet] -- <command...>
 Safety-check a shell command, then run it. The same check as the agent safety hook, for cron jobs, CI steps, runbooks,
 and scripts: routine commands are decided locally; others are sent to Jev with secrets redacted, together with the
 contents of local scripts they run, and scored for destructive actions, exfiltration, running downloaded code,
@@ -540,7 +540,7 @@ output: nothing of its own when the command runs (stdout and stderr belong to th
 when it is blocked. Decisions that reach Jev are logged to ~/.config/jev-axi/stats/safety.jsonl.
 flags:
   --on-ask <mode>      when the check wants approval: prompt (default; on a terminal, otherwise deny), deny, allow
-  --on-error <mode>    when Jev is unreachable or there is no API key: allow (default) or deny
+  --on-error <mode>    auto (default: deny API 403, allow other errors), allow, or deny
   --dry-run            print the decision and scores without running the command; exit 0 if it would run, 126 if not
   --quiet              no stderr note when a command is blocked
 examples:

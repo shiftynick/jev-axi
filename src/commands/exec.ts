@@ -4,15 +4,14 @@ import { createInterface } from "node:readline";
 import { isatty } from "node:tty";
 import { parseArgs } from "../args.js";
 import { validation } from "../errors.js";
-import type { Decision } from "../safety.js";
 import type { Renderable } from "./common.js";
-import { judgeToolCall } from "./hook.js";
+import { judgeToolCall, type ErrorPolicy } from "./hook.js";
 
 /** Exit status when a command is not run, following the shell's "found but not executed" convention. */
 export const BLOCKED_EXIT = 126;
 const EXEC_TIMEOUT_MS = 15_000;
 
-export const GUARD_EXEC_HELP = `usage: jev-axi guard-exec [--on-ask prompt|deny|allow] [--on-error allow|deny] [--dry-run] [--quiet] -- <command...>
+export const GUARD_EXEC_HELP = `usage: jev-axi guard-exec [--on-ask prompt|deny|allow] [--on-error auto|allow|deny] [--dry-run] [--quiet] -- <command...>
 Safety-check a shell command, then run it. The same check as the agent safety hook, for cron jobs, CI steps, runbooks,
 and scripts: routine commands are decided locally; others are sent to Jev with secrets redacted, together with the
 contents of local scripts they run, and scored for destructive actions, exfiltration, running downloaded code,
@@ -23,7 +22,7 @@ output: nothing of its own when the command runs (stdout and stderr belong to th
 when it is blocked. Decisions that reach Jev are logged to ~/.config/jev-axi/stats/safety.jsonl.
 flags:
   --on-ask <mode>      when the check wants approval: prompt (default; on a terminal, otherwise deny), deny, allow
-  --on-error <mode>    when Jev is unreachable or there is no API key: allow (default) or deny
+  --on-error <mode>    auto (default: deny API 403, allow other errors), allow, or deny
   --dry-run            print the decision and scores without running the command; exit 0 if it would run, ${BLOCKED_EXIT} if not
   --quiet              no stderr note when a command is blocked
 examples:
@@ -76,8 +75,8 @@ export async function guardExecCommand(args: string[]): Promise<Renderable> {
   if (argv.length === 0 || argv[0] === "") throw validation("no command given", ['jev-axi guard-exec -- "<command>"']);
   const onAsk = p.values["--on-ask"] ?? "prompt";
   if (!["prompt", "deny", "allow"].includes(onAsk)) throw validation("--on-ask must be prompt, deny, or allow");
-  const onError = (p.values["--on-error"] ?? "allow") as Decision;
-  if (onError !== "allow" && onError !== "deny") throw validation("--on-error must be allow or deny");
+  const onError = (p.values["--on-error"] ?? "auto") as ErrorPolicy;
+  if (onError !== "auto" && onError !== "allow" && onError !== "deny") throw validation("--on-error must be auto, allow, or deny");
 
   const command = argv.length === 1 ? argv[0]! : shellJoin(argv);
   const j = await judgeToolCall({ tool_name: "Bash", tool_input: { command }, cwd: process.cwd() }, { agent: "exec", onError, timeoutMs: EXEC_TIMEOUT_MS });
