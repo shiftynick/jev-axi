@@ -3,6 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { stdinKind } from "../src/stdin.js";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const TSX = join(ROOT, "node_modules", "tsx", "dist", "cli.mjs");
@@ -19,6 +20,18 @@ function runAgentStyle(args: string[], cwd: string) {
   });
   return { out: r.stdout, code: r.status };
 }
+
+describe("stdinKind", () => {
+  it("reads the stat type bits directly, so Windows named pipes count as pipes", () => {
+    // A Windows shell pipe reports mode 0o10000 (S_IFIFO) with isFIFO() === false and isFile() === false.
+    expect(stdinKind(0o10000, false)).toBe("pipe");
+    expect(stdinKind(0o140000, false)).toBe("pipe");
+    expect(stdinKind(0o100000, true)).toBe("file");
+    expect(stdinKind(0o100000, false)).toBe("file");
+    expect(stdinKind(0o020000, false)).toBe("none");
+    expect(stdinKind(0o040000, false)).toBe("none");
+  });
+});
 
 describe("empty stdin from agent harnesses", () => {
   it("diff reviews the git working tree instead of the empty stdin", () => {

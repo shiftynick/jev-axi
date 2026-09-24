@@ -78,7 +78,7 @@ describe("decisions", () => {
 });
 
 describe("API rejection policy", () => {
-  it("denies HTTP 403 by default, while explicit policy and other errors keep their behavior", async () => {
+  it("denies a JSON 403 by default, treats a firewall HTML 403 as unavailability, and keeps explicit policy behavior", async () => {
     const saved = Object.fromEntries(["TYPESAFE_API_KEY", "JEV_AXI_NO_CACHE", "XDG_CONFIG_HOME"].map((key) => [key, process.env[key]]));
     process.env["TYPESAFE_API_KEY"] = "test-key";
     process.env["JEV_AXI_NO_CACHE"] = "1";
@@ -88,13 +88,19 @@ describe("API rejection policy", () => {
       "pre-tool-use", "--input", JSON.stringify(call), "--explain", "--json", ...(mode ? ["--on-error", mode] : []),
     ])));
     try {
-      configureFetch((async () => new Response("<html>blocked by firewall</html>", { status: 403 })) as any);
+      // A JSON 403 from the API names the key/rule: the request was judged and refused, so fail closed.
+      configureFetch((async () => new Response(JSON.stringify({ detail: "exceeded plan quota" }), { status: 403, headers: { "content-type": "application/json" } })) as any);
       const rejected = await run();
       expect(rejected).toMatchObject({ decision: "deny", source: "error" });
       expect(rejected.reason).toContain("rejected by the API (403)");
-      expect(rejected.reason).not.toContain("<html>");
-      expect(await run("allow")).toMatchObject({ decision: "allow", source: "error" });
-      expect(await run("ask")).toMatchObject({ decision: "ask", source: "error" });
+
+      // An HTML 403 comes from a firewall edge in front of the API: the request never reached the model,
+      // so under auto it is unavailability (allow), not a safety verdict.
+      configureFetch((async () => new Response('<html><head><title>403 Forbidden</title></head><body>blocked</body></html>', { status: 403 })) as any);
+      const blocked = await run();
+      expect(blocked).toMatchObject({ decision: "allow", source: "error" });
+      expect(blocked.reason).toContain("unavailable");
+      expect(await run("deny")).toMatchObject({ decision: "deny", source: "error" });
 
       configureFetch((async () => new Response("unavailable", { status: 500 })) as any);
       expect(await run()).toMatchObject({ decision: "allow", source: "error" });
