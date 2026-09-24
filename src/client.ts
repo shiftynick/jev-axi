@@ -314,6 +314,15 @@ function translateError(error: unknown): AxiError {
     ]);
   }
   if (error instanceof APIError) {
+    // A 403 that answers with HTML comes from a firewall/proxy edge in front of api.typesafe.ai,
+    // not from the API: the request never reached the model, so this is unavailability (fail open
+    // under `--on-error auto`), not a rejected safety request (fail closed).
+    if (error.status === 403 && isHtmlBody(error.body)) {
+      return new AxiError("An edge in front of api.typesafe.ai answered the request with an HTML 403, so it never reached the model", "NETWORK", [
+        "Usually a firewall or proxy, not the key or the request; retry",
+        "If it persists check network access to api.typesafe.ai and https://status.typesafe.ai",
+      ]);
+    }
     const code = error.status === 529 ? "OVERLOADED" : error.status === 403 ? "API_REJECTED" : "API_ERROR";
     return new AxiError(`TypeSafe API error (${error.status}): ${detail(error.body) || error.message}`, code, [
       error.status === 529 ? "TypeSafe is overloaded; retry shortly" : "Retry; if it persists check https://status.typesafe.ai",
@@ -337,6 +346,11 @@ function detail(body: unknown): string {
   } catch {
     return "";
   }
+}
+
+/** True when the body is an HTML page, i.e. a proxy/firewall intercept rather than the API's JSON error shape. */
+function isHtmlBody(body: unknown): boolean {
+  return typeof body === "string" && /^\s*(<!doctype html|<html)/i.test(body.slice(0, 2048));
 }
 
 export async function listModels(fetch?: Fetch): Promise<{ name: string; description: string; release_date: string }[]> {

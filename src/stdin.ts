@@ -2,6 +2,24 @@ import { spawnSync } from "node:child_process";
 import { fstatSync, readFileSync } from "node:fs";
 import { isatty } from "node:tty";
 
+// POSIX stat type bits (S_IFMT field). Read directly because isFIFO()/isSocket() lie about
+// named pipes on Windows (libuv leaves the bit unset in its flag mapping) even though mode is right.
+const S_IFMT = 0o170000;
+const S_IFREG = 0o100000;
+const S_IFSOCK = 0o140000;
+const S_IFIFO = 0o010000;
+
+/**
+ * What kind of thing stdin is attached to, from fstat: pipes and sockets (may stall, read with a
+ * deadline), regular files (always reach EOF), or nothing usable (/dev/null, a directory, ...).
+ */
+export function stdinKind(mode: number, isFile: boolean): "file" | "pipe" | "none" {
+  const type = mode & S_IFMT;
+  if (type === S_IFIFO || type === S_IFSOCK) return "pipe";
+  if (type === S_IFREG || isFile) return "file";
+  return "none";
+}
+
 export function isStdinTTY(): boolean {
   return isatty(0);
 }
@@ -49,8 +67,9 @@ export function readImplicitStdin(wait: keyof typeof STDIN_WAIT_MS = "required")
   let file: boolean;
   try {
     const st = fstatSync(0);
-    if (!st.isFIFO() && !st.isFile() && !st.isSocket()) return undefined; // e.g. /dev/null
-    file = st.isFile();
+    const kind = stdinKind(st.mode, st.isFile());
+    if (kind === "none") return undefined;
+    file = kind === "file";
   } catch {
     return undefined;
   }
