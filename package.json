@@ -51,7 +51,7 @@
   },
   "dependencies": {
     "@toon-format/toon": "^4.1.1",
-    "@typesafe-ai/sdk": "^0.6.0",
+    "@typesafe-ai/sdk": "^0.7.0",
     "axi-sdk-js": "^0.1.12",
     "yaml": "^2.9.1"
   },
