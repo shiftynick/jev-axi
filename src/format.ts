@@ -1,7 +1,7 @@
 import { bandForConfidence, bandForNoul, noulConfidence, type Band } from "./bands.js";
 import type { Answer, EvalResult } from "./client.js";
 import type { Thresholds } from "./config.js";
-import { estimateCost, formatCost } from "./usage.js";
+import { estimateCost, formatCost, sumTokens } from "./usage.js";
 
 export function round(n: number, places = 2): number {
   const f = 10 ** places;
@@ -41,18 +41,18 @@ export function distributionRows(a: Answer, limit?: number): Record<string, unkn
 /** One compact line the agent can read at a glance: tokens, latency, model, cost when known. */
 export function usageLine(r: EvalResult): string {
   const cost = estimateCost(r.usage.input_tokens, r.usage.output_tokens);
-  const parts = [`${r.usage.input_tokens}in/${r.usage.output_tokens}out`, r.cached ? "cached" : `${r.ms}ms`, r.model, r.cached ? `saved ${formatCost(cost)}` : formatCost(cost)];
+  const parts = [`${r.usage.input_tokens ?? "?"}in/${r.usage.output_tokens ?? "?"}out`, r.cached ? "cached" : `${r.ms}ms`, r.model, r.cached ? `saved ${formatCost(cost)}` : formatCost(cost)];
   return parts.join(" ");
 }
 
 export function mergedUsageLine(results: EvalResult[]): string {
   if (results.length === 1) return usageLine(results[0]!);
-  const input = results.reduce((s, r) => s + r.usage.input_tokens, 0);
-  const output = results.reduce((s, r) => s + r.usage.output_tokens, 0);
+  const input = results.reduce<number | null>((s, r) => sumTokens(s, r.usage.input_tokens), 0);
+  const output = results.reduce<number | null>((s, r) => sumTokens(s, r.usage.output_tokens), 0);
   const ms = results.reduce((s, r) => s + r.ms, 0);
   const cached = results.filter((r) => r.cached).length;
   const cost = estimateCost(input, output);
-  return [`${input}in/${output}out`, `${ms}ms`, `${results.length} calls${cached ? ` (${cached} cached)` : ""}`, results[0]!.model, formatCost(cost)].join(" ");
+  return [`${input ?? "?"}in/${output ?? "?"}out`, `${ms}ms`, `${results.length} calls${cached ? ` (${cached} cached)` : ""}`, results[0]!.model, formatCost(cost)].join(" ");
 }
 
 export function truncate(text: string, max: number): { text: string; truncated: boolean; total: number } {

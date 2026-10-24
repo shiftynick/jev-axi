@@ -91,7 +91,7 @@ export async function usageCommand(args: string[]): Promise<AxiRenderable> {
     questions: t.questions,
     avg_ms: t.billed_calls ? Math.round(t.ms / t.billed_calls) : 0,
   };
-  out["cost"] = `${formatCost(cost)} estimated at $${price.input}/$${price.output} per 1M in/out${saved ? ` (${formatCost(saved)} saved by cache)` : ""}`;
+  out["cost"] = `${formatCost(cost)} estimated at $${price.input}/$${price.output} per 1M in/out${saved === null || saved > 0 ? ` (${formatCost(saved)} saved by cache)` : ""}`;
   out[`by_${by}`] = groups;
   const help: string[] = [];
   help.push(`Run \`jev-axi usage --by ${by === "day" ? "command" : "day"}\` for another view, or \`jev-axi stats\` for lifetime trends`);

@@ -1,8 +1,9 @@
+import type { EvalResult } from "../src/client.js";
 import { describe, expect, it } from "vitest";
 import { bandForConfidence, bandForNoul, noulConfidence } from "../src/bands.js";
 import { chunkItems, type Item } from "../src/items.js";
 import { estimateCost, formatCost, groupUsage, totals, type UsageEntry } from "../src/usage.js";
-import { answerRow, distributionRows, oneLine } from "../src/format.js";
+import { answerRow, distributionRows, mergedUsageLine, oneLine, usageLine } from "../src/format.js";
 
 const T = { act: 0.75, confirm: 0.45 };
 
@@ -40,6 +41,16 @@ describe("usage", () => {
     expect(t.cached_calls).toBe(1);
     expect(t.input).toBe(100);
     expect(t.saved_input).toBe(50);
+  });
+  it("does not turn unreported tokens into zero in totals or costs", () => {
+    expect(totals([e({}), e({ in: null }), e({ cached: true, out: null })])).toMatchObject({ input: null, output: 20, saved_input: 100, saved_output: null });
+    expect(estimateCost(null, 10)).toBeNull();
+    expect(estimateCost(1_000_000, null, { input: 0.1, output: 0 })).toBeCloseTo(0.1);
+    expect(estimateCost(10, null, { input: 0.1, output: 0.4 })).toBeNull();
+    expect(formatCost(null)).toBe("unknown");
+    const result: EvalResult = { model: "jev", answers: {}, usage: { input_tokens: null, output_tokens: 10 }, ms: 1, cached: false };
+    expect(usageLine(result)).toBe("?in/10out 1ms jev unknown");
+    expect(mergedUsageLine([result, { ...result, usage: { input_tokens: 100, output_tokens: 1 } }])).toBe("?in/11out 2ms 2 calls jev unknown");
   });
   it("groups by day and command", () => {
     const g = groupUsage([e({}), e({ cmd: "rank" }), e({ ts: "2026-09-15T10:00:00Z" })], "day");

@@ -1,3 +1,4 @@
+import { apiBody } from "./api-body.js";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,7 +10,7 @@ import { main } from "../src/cli.js";
 function fakeApi(nouls: Record<string, number> = {}, fallback = 0.1) {
   const requests: any[] = [];
   const fetch = async (_url: any, init?: any) => {
-    const body = JSON.parse(init.body);
+    const body = apiBody(init);
     requests.push(body);
     const answers: Record<string, unknown> = {};
     for (const [id, q] of Object.entries<any>(body.questions)) {

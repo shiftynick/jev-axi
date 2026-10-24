@@ -198,7 +198,7 @@ const MAX_SCRIPT_CHARS = 4000;
 const MAX_CONTENT_CHARS = 3000;
 
 /** What Jev sees: the call with secrets redacted, plus the contents of any local script it runs. */
-export function buildSafetyState(call: ToolCall): EntryType {
+export function buildSafetyState(call: ToolCall): Record<string, EntryType> {
   const cwd = call.cwd ?? process.cwd();
   const input = call.tool_input ?? {};
   const state: Record<string, EntryType> = { tool: call.tool_name, cwd };

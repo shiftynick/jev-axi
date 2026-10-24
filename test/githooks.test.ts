@@ -1,3 +1,4 @@
+import { apiBody } from "./api-body.js";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -31,7 +32,7 @@ function fakeApi(noul: number) {
   const bodies: string[] = [];
   configureFetch((async (_url: unknown, init?: { body: string }) => {
     bodies.push(init!.body);
-    const q = JSON.parse(init!.body).questions as Record<string, any>;
+    const q = apiBody(init!).questions as Record<string, any>;
     const answers = Object.fromEntries(
       Object.entries(q).map(([id, spec]) => [
         id,

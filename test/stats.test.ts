@@ -10,12 +10,16 @@ describe("trend helpers", () => {
   it("renders sparklines scaled to the max", () => {
     expect(sparkline([0, 1, 2, 4])).toBe("▁▃▅█");
     expect(sparkline([0, 0])).toBe("▁▁");
+    expect(sparkline([0, null, 4])).toBe("▁?█");
+    expect(sparkline([null])).toBe("?");
   });
   it("labels period changes", () => {
     expect(trendLabel(12, 10)).toBe("+20%");
     expect(trendLabel(5, 10)).toBe("-50%");
     expect(trendLabel(3, 0)).toBe("new");
     expect(trendLabel(0, 0)).toBe("flat");
+    expect(trendLabel(null, 10)).toBe("unknown");
+    expect(trendLabel(10, null)).toBe("unknown");
   });
   it("zero-fills daily series and sums bands", () => {
     const now = new Date("2026-09-16T12:00:00Z");

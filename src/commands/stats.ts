@@ -78,7 +78,7 @@ export async function statsCommand(args: string[]): Promise<Renderable> {
           calls: t.calls,
           share: cur.calls ? `${Math.round((t.calls / cur.calls) * 100)}%` : "-",
           avg_q: t.calls ? round(t.questions / t.calls, 1) : 0,
-          avg_in: t.billed_calls ? Math.round(t.input / t.billed_calls) : 0,
+          avg_in: t.input === null ? "unknown" : t.billed_calls ? Math.round(t.input / t.billed_calls) : 0,
           avg_ms: t.billed_calls ? Math.round(t.ms / t.billed_calls) : 0,
           act: n ? `${Math.round((b.act / n) * 100)}%` : "-",
           cost: formatCost(estimateCost(t.input, t.output)),
@@ -87,10 +87,10 @@ export async function statsCommand(args: string[]): Promise<Renderable> {
       .sort((a, b) => Number(b["calls"]) - Number(a["calls"]))
       .slice(0, top);
 
-  const biggest = all.reduce((m, e) => (e.in > m.in ? e : m), all[0]!);
+  const biggest = all.reduce((m, e) => ((e.in ?? -1) > (m.in ?? -1) ? e : m), all[0]!);
   const busiest = [...groupUsage(all, "day")].map(([day, list]) => ({ day, calls: list.length })).sort((a, b) => b.calls - a.calls)[0]!;
   const dailyRate = activeDays ? cur.calls / days : 0;
-  const monthly = (curCost / days) * 30;
+  const monthly = curCost === null ? null : (curCost / days) * 30;
 
   const out: Record<string, unknown> = {
     ledger: paths.usageLedger(),
@@ -98,7 +98,7 @@ export async function statsCommand(args: string[]): Promise<Renderable> {
     window: `last ${days} days vs the ${days} before`,
     calls: `${cur.calls} (${trendLabel(cur.calls, prev.calls)}), ${activeDays} active days, ${round(dailyRate, 1)}/day`,
     questions: `${cur.questions} (${trendLabel(cur.questions, prev.questions)}), ${cur.calls ? round(cur.questions / cur.calls, 1) : 0} per call`,
-    tokens: `${formatTokens(cur.input)} in (${trendLabel(cur.input, prev.input)}), ${cur.billed_calls ? Math.round(cur.input / cur.billed_calls) : 0} avg per call`,
+    tokens: `${formatTokens(cur.input)} in (${trendLabel(cur.input, prev.input)}), ${cur.input === null ? "unknown" : cur.billed_calls ? Math.round(cur.input / cur.billed_calls) : 0} avg per call`,
     cost: `${formatCost(curCost)} (${trendLabel(curCost, prevCost)}), projected ${formatCost(monthly)}/month at this rate`,
     latency: `${cur.billed_calls ? Math.round(cur.ms / cur.billed_calls) : 0}ms avg (${prev.billed_calls ? trendLabel(cur.ms / Math.max(1, cur.billed_calls), prev.ms / prev.billed_calls) : "new"})`,
     cache: `${cur.calls ? Math.round((cur.cached_calls / cur.calls) * 100) : 0}% hit rate, ${formatCost(estimateCost(cur.saved_input, cur.saved_output))} saved`,
@@ -109,7 +109,7 @@ export async function statsCommand(args: string[]): Promise<Renderable> {
     by_project: breakdown(current, "project"),
     ...superviseStats(cutoff),
     records: {
-      biggest_call: `${biggest.cmd} on ${biggest.ts.slice(0, 10)}: ${formatTokens(biggest.in)} in, ${biggest.q} questions, ${formatCost(estimateCost(biggest.in, biggest.out))}`,
+      biggest_call: lifetime.input === null || lifetime.saved_input === null ? "unknown (some token counts were not reported)" : `${biggest.cmd} on ${biggest.ts.slice(0, 10)}: ${formatTokens(biggest.in)} in, ${biggest.q} questions, ${formatCost(estimateCost(biggest.in, biggest.out))}`,
       busiest_day: `${busiest.day}: ${busiest.calls} calls`,
     },
   };

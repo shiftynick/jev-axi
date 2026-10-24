@@ -91,7 +91,7 @@ export function countBands(answers: Record<string, Answer>): BandCounts {
   return b;
 }
 
-function cacheKey(model: string, state: EntryType, questions: QuestionMap): string {
+function cacheKey(model: string, state: NonNullable<EntryType>, questions: QuestionMap): string {
   return createHash("sha256").update(JSON.stringify({ model, state, questions })).digest("hex");
 }
 
@@ -212,7 +212,7 @@ export function clearCache(onlyStale: boolean, now = Date.now()): number {
  * the usage ledger, and translating SDK errors into structured AXI errors.
  */
 export async function evaluate(
-  state: EntryType,
+  state: NonNullable<EntryType>,
   questions: QuestionMap,
   opts: EvalOptions,
 ): Promise<EvalResult> {

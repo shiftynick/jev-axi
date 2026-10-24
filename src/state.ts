@@ -15,7 +15,7 @@ export const STATE_FLAGS = {
  * Resolve the state for a single-state command from, in order:
  * --state <path|->, --text "<literal>", --state-json '<json>', or piped stdin.
  */
-export function loadState(p: Parsed): EntryType {
+export function loadState(p: Parsed): NonNullable<EntryType> {
   const given = [p.values["--state"], p.values["--text"], p.values["--state-json"]].filter((v) => v !== undefined);
   if (given.length > 1) throw validation("give only one of --state, --text, --state-json");
 
@@ -55,14 +55,14 @@ export function loadState(p: Parsed): EntryType {
   return raw;
 }
 
-export function parseJson(text: string, label: string): EntryType {
+export function parseJson(text: string, label: string): NonNullable<EntryType> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch (e) {
     throw validation(`${label} is not valid JSON: ${(e as Error).message}`);
   }
-  if (typeof parsed === "string" || (typeof parsed === "object" && parsed !== null)) return parsed as EntryType;
+  if (typeof parsed === "string" || (typeof parsed === "object" && parsed !== null)) return parsed as NonNullable<EntryType>;
   throw validation(`${label} must be a JSON string, object, or array`);
 }
 

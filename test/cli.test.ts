@@ -1,3 +1,4 @@
+import { apiBody } from "./api-body.js";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,7 +10,7 @@ import { main } from "../src/cli.js";
 function fakeApi() {
   const requests: any[] = [];
   const fetch = async (_url: any, init?: any) => {
-    const body = JSON.parse(init.body);
+    const body = apiBody(init);
     requests.push(body);
     const answers: Record<string, unknown> = {};
     for (const [id, q] of Object.entries<any>(body.questions)) {
@@ -133,7 +134,7 @@ describe("cli", () => {
 
   it("keeps a high-probability hit in a later window of a large file", async () => {
     const api = async (_url: unknown, init?: any) => {
-      const body = JSON.parse(init.body);
+      const body = apiBody(init);
       const state = String(body.state);
       const exists = state.includes("THE RETRY DELAY") ? 0.9 : 0.1;
       const answers: Record<string, unknown> = {};
@@ -165,7 +166,7 @@ describe("cli", () => {
 
   it("rank scores an item the same however many chunks surround it", async () => {
     const api = async (_url: unknown, init?: any) => {
-      const body = JSON.parse(init.body);
+      const body = apiBody(init);
       const target = Object.entries<any>(body.state).find(([, v]) => v.text.includes("THE RETRY DELAY"))?.[0];
       const answers: Record<string, unknown> = {};
       for (const [id, q] of Object.entries<any>(body.questions)) {

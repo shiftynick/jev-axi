@@ -1,3 +1,4 @@
+import { apiBody } from "./api-body.js";
 import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,7 +12,7 @@ function fakeApi(noul: number, risk: number) {
   let calls = 0;
   configureFetch((async (_url: unknown, init?: { body: string }) => {
     calls++;
-    const q = JSON.parse(init!.body).questions as Record<string, any>;
+    const q = apiBody(init!).questions as Record<string, any>;
     const answers = Object.fromEntries(
       Object.entries(q).map(([id, spec]) => [id, spec.type === "noul" ? { type: "noul", noul } : { type: "score", score: risk, legend: {}, probabilities: {}, confidence: 0.9 }]),
     );
