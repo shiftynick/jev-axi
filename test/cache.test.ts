@@ -1,18 +1,20 @@
+import { apiBody } from "./api-body.js";
 import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { configureFetch, staleReason } from "../src/client.js";
+import { readUsage, totals } from "../src/usage.js";
 import { main } from "../src/cli.js";
 
 /** Fake API whose reported model version can be changed mid-test, like TypeSafe moving jev-latest. */
-function fakeApi() {
+function fakeApi(usage: { input_tokens: number | null; output_tokens: number | null } = { input_tokens: 10, output_tokens: 1 }) {
   const state = { version: "jev-1.13.0", calls: 0 };
   const fetch = async (_url: any, init?: any) => {
     state.calls++;
-    const body = JSON.parse(init.body);
+    const body = apiBody(init);
     const answers = Object.fromEntries(Object.keys(body.questions).map((id) => [id, { type: "noul", noul: 0.9 }]));
-    return new Response(JSON.stringify({ model: state.version, answers, usage: { input_tokens: 10, output_tokens: 1 } }), { status: 200 });
+    return new Response(JSON.stringify({ model: state.version, answers, usage }), { status: 200 });
   };
   return { fetch: fetch as any, state };
 }
@@ -45,6 +47,28 @@ describe("response cache", () => {
     await check();
     await check();
     expect(api.state.calls).toBe(1);
+  });
+
+  it("preserves unknown token counts in live and cached answers and the ledger", async () => {
+    const api = fakeApi({ input_tokens: null, output_tokens: null });
+    configureFetch(api.fetch);
+    await check();
+    expect(out).toContain("?in/?out");
+    expect(out).toContain("unknown");
+    out = "";
+    await check();
+    expect(api.state.calls).toBe(1);
+    expect(out).toContain("?in/?out cached");
+    const entries = readUsage();
+    expect(entries.map((e) => [e.in, e.out, e.cached])).toEqual([[null, null, false], [null, null, true]]);
+    expect(totals(entries)).toMatchObject({ input: null, output: null, saved_input: null, saved_output: null });
+    out = "";
+    await main(["usage", "--json"], stdout);
+    expect(JSON.parse(out)).toMatchObject({ cost: null, saved: null });
+    out = "";
+    await main(["stats"], stdout);
+    expect(out).toContain("unknown");
+    expect(out).not.toContain("NaN");
   });
 
   it("stops serving cached answers once jev-latest resolves to a new version", async () => {

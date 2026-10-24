@@ -12,8 +12,9 @@ export interface UsageEntry {
   ts: string;
   cmd: string;
   model: string;
-  in: number;
-  out: number;
+  /** null means the API did not report the token count. */
+  in: number | null;
+  out: number | null;
   ms: number;
   q: number;
   cached: boolean;
@@ -80,10 +81,10 @@ export interface UsageTotals {
   calls: number;
   billed_calls: number;
   cached_calls: number;
-  input: number;
-  output: number;
-  saved_input: number;
-  saved_output: number;
+  input: number | null;
+  output: number | null;
+  saved_input: number | null;
+  saved_output: number | null;
   questions: number;
   ms: number;
 }
@@ -106,12 +107,12 @@ export function totals(entries: UsageEntry[]): UsageTotals {
     t.ms += e.ms;
     if (e.cached) {
       t.cached_calls++;
-      t.saved_input += e.in;
-      t.saved_output += e.out;
+      t.saved_input = sumTokens(t.saved_input, e.in);
+      t.saved_output = sumTokens(t.saved_output, e.out);
     } else {
       t.billed_calls++;
-      t.input += e.in;
-      t.output += e.out;
+      t.input = sumTokens(t.input, e.in);
+      t.output = sumTokens(t.output, e.out);
     }
   }
   return t;
@@ -130,19 +131,27 @@ export function groupUsage(entries: UsageEntry[], by: GroupBy): Map<string, Usag
   return groups;
 }
 
-/** Estimated USD cost using configured prices, falling back to the defaults. */
-export function estimateCost(input: number, output: number, price?: Prices): number {
-  const p = price === undefined ? resolvePrices() : { input: price.input ?? resolvePrices().input, output: price.output ?? resolvePrices().output };
-  return (input * p.input + output * p.output) / 1_000_000;
+/** A total is unknown if any of its counts were not reported. */
+export function sumTokens(a: number | null, b: number | null): number | null {
+  return a === null || b === null ? null : a + b;
 }
 
-export function formatCost(usd: number): string {
+/** Estimated USD cost using configured prices, falling back to the defaults. */
+export function estimateCost(input: number | null, output: number | null, price?: Prices): number | null {
+  const p = price === undefined ? resolvePrices() : { input: price.input ?? resolvePrices().input, output: price.output ?? resolvePrices().output };
+  if ((input === null && p.input !== 0) || (output === null && p.output !== 0)) return null;
+  return ((input ?? 0) * p.input + (output ?? 0) * p.output) / 1_000_000;
+}
+
+export function formatCost(usd: number | null): string {
+  if (usd === null) return "unknown";
   if (usd === 0) return "$0";
   if (usd < 0.01) return `$${usd.toFixed(5)}`;
   return `$${usd.toFixed(4)}`;
 }
 
-export function formatTokens(n: number): string {
+export function formatTokens(n: number | null): string {
+  if (n === null) return "unknown";
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
   if (n >= 10_000) return `${(n / 1000).toFixed(1)}k`;
   return String(n);
@@ -152,8 +161,8 @@ export interface DayPoint {
   day: string;
   calls: number;
   questions: number;
-  input: number;
-  cost: number;
+  input: number | null;
+  cost: number | null;
 }
 
 /** One point per calendar day (UTC) for the last `days` days, zero-filled. */
@@ -172,14 +181,14 @@ export function dailySeries(entries: UsageEntry[], days: number, now = new Date(
 const BARS = "▁▂▃▄▅▆▇█";
 
 /** Unicode sparkline; an all-zero series renders as flat baseline. */
-export function sparkline(values: number[]): string {
-  const max = Math.max(...values, 0);
-  if (max === 0) return BARS[0]!.repeat(values.length);
-  return values.map((v) => BARS[Math.min(BARS.length - 1, Math.round((v / max) * (BARS.length - 1)))]).join("");
+export function sparkline(values: (number | null)[]): string {
+  const max = Math.max(...values.filter((v): v is number => v !== null), 0);
+  return values.map((v) => v === null ? "?" : BARS[max === 0 ? 0 : Math.min(BARS.length - 1, Math.round((v / max) * (BARS.length - 1)))]).join("");
 }
 
 /** "+12%" / "-5%" / "new" / "flat" comparing a period against the one before it. */
-export function trendLabel(current: number, previous: number): string {
+export function trendLabel(current: number | null, previous: number | null): string {
+  if (current === null || previous === null) return "unknown";
   if (previous === 0) return current === 0 ? "flat" : "new";
   const pct = Math.round(((current - previous) / previous) * 100);
   if (pct === 0) return "flat";

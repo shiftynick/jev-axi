@@ -1,3 +1,4 @@
+import { apiBody } from "./api-body.js";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -10,7 +11,7 @@ import { buildObservation, decideProgress, readTranscript, recordEvent, readSess
 function fakeApi(nouls: Record<string, number> = {}, fallback = 0.1) {
   const requests: any[] = [];
   const fetch = async (_url: any, init?: any) => {
-    const body = JSON.parse(init.body);
+    const body = apiBody(init);
     requests.push(body);
     const answers = Object.fromEntries(Object.keys(body.questions).map((id) => [id, { type: "noul", noul: nouls[id] ?? fallback }]));
     return new Response(JSON.stringify({ model: "jev-test", answers, usage: { input_tokens: 50, output_tokens: 5 } }), { status: 200 });
